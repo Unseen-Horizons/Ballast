@@ -1,0 +1,12 @@
+# Keeps the SHA-pinned actions in .github/workflows current, and the package versions in Directory.Packages.props.
+# Dependabot only opens pull requests. CI is the gate, and nothing merges by itself.
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "nuget"
+    directory: "/"
+    schedule:
+      interval: "weekly"

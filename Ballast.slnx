@@ -1,0 +1,18 @@
+<Solution>
+  <Folder Name="/Libraries/">
+    <Project Path="src/Ballast.Errors/Ballast.Errors.csproj" />
+    <Project Path="src/Ballast.Paging/Ballast.Paging.csproj" />
+    <Project Path="src/Ballast.Time/Ballast.Time.csproj" />
+    <Project Path="src/Ballast.Text/Ballast.Text.csproj" />
+    <Project Path="src/Ballast.Geo/Ballast.Geo.csproj" />
+    <Project Path="src/Ballast.Money/Ballast.Money.csproj" />
+  </Folder>
+  <Folder Name="/Tests/">
+    <Project Path="tests/Ballast.Errors.Tests/Ballast.Errors.Tests.csproj" />
+    <Project Path="tests/Ballast.Paging.Tests/Ballast.Paging.Tests.csproj" />
+    <Project Path="tests/Ballast.Time.Tests/Ballast.Time.Tests.csproj" />
+    <Project Path="tests/Ballast.Text.Tests/Ballast.Text.Tests.csproj" />
+    <Project Path="tests/Ballast.Geo.Tests/Ballast.Geo.Tests.csproj" />
+    <Project Path="tests/Ballast.Money.Tests/Ballast.Money.Tests.csproj" />
+  </Folder>
+</Solution>

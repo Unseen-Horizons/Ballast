@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Title>Ballast.Money</Title>
+    <Description>Currency codes, rounding to minor units, line totals and money formatting.</Description>
+  </PropertyGroup>
+
+</Project>

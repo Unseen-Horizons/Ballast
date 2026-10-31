@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Title>Ballast.Time</Title>
+    <Description>Time zone lookup, place time that keeps each local time in its own zone, and a one-zone local clock.</Description>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Title>Ballast.Geo</Title>
+    <Description>Coordinate check, distance, bounding box and polygon containment.</Description>
+  </PropertyGroup>
+
+</Project>

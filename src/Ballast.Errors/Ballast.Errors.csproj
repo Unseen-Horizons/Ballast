@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Title>Ballast.Errors</Title>
+    <Description>Error type with stable codes, the problem answer shape, and a reader for problem answers.</Description>
+  </PropertyGroup>
+
+</Project>

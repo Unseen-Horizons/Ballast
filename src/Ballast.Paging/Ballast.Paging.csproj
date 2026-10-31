@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Title>Ballast.Paging</Title>
+    <Description>Page request with safe limits, an overflow-safe offset, and the paged result shape.</Description>
+  </PropertyGroup>
+
+</Project>

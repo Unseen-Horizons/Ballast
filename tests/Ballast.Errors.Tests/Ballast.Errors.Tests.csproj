@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Ballast.Errors\Ballast.Errors.csproj" />
+  </ItemGroup>
+
+</Project>

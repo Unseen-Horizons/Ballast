@@ -1,0 +1,138 @@
+root = true
+
+[*.cs]
+
+# File header: every .cs file starts with the MPL-2.0 notice. IDE0073 is a warning, so a file without it fails
+# -warnaserror. The notice's line breaks are written as \n in this value.
+file_header_template = Copyright (c) 2026 Unseen Horizons\nThis Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0. If a copy of the MPL was not\ndistributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/.
+dotnet_diagnostic.IDE0073.severity = warning
+
+# File-scoped namespaces
+dotnet_diagnostic.IDE0161.severity = suggestion
+csharp_style_namespace_declarations = file_scoped:suggestion
+
+# Null check patterns (is null / is not null)
+csharp_style_prefer_null_check_over_type_check = true:suggestion
+csharp_style_expression_bodied_operators = true:silent
+
+# Collection expressions (use [] not new List<T>())
+dotnet_style_prefer_collection_expression = true:suggestion
+csharp_style_implicit_object_creation_when_type_is_apparent = true:suggestion
+
+# Using directive ordering
+dotnet_sort_system_directives_first = true
+dotnet_separate_import_directive_groups = true
+dotnet_diagnostic.IDE0005.severity = suggestion
+
+# var preferences
+csharp_style_var_for_built_in_types = true:suggestion
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_style_var_elsewhere = true:suggestion
+
+# Modifier preferences
+csharp_preferred_modifier_order = public,private,protected,internal,static,extern,new,virtual,abstract,sealed,override,readonly,unsafe,volatile,async:silent
+
+# Expression-bodied members
+csharp_style_expression_bodied_methods = true:silent
+csharp_style_expression_bodied_constructors = false:silent
+csharp_style_expression_bodied_properties = true:silent
+
+# Naming rules
+dotnet_naming_symbols.interfaces.applicable_kinds = interface
+dotnet_naming_symbols.interfaces.applicable_accessibilities = public,internal,private,protected,protected_internal,private_protected
+dotnet_naming_symbols.interfaces.required_modifiers =
+dotnet_naming_style.interfaces.prefix = I
+dotnet_naming_style.interfaces.capitalization = pascal_case
+dotnet_naming_rule.interfaces.symbols = interfaces
+dotnet_naming_rule.interfaces.style = interfaces
+
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+dotnet_naming_style.private_fields.prefix = _
+dotnet_naming_style.private_fields.capitalization = camel_case
+dotnet_naming_rule.private_fields.symbols = private_fields
+dotnet_naming_rule.private_fields.style = private_fields
+
+dotnet_naming_symbols.private_static_fields.applicable_kinds = field
+dotnet_naming_symbols.private_static_fields.applicable_accessibilities = private
+dotnet_naming_symbols.private_static_fields.required_modifiers = static
+dotnet_naming_style.private_static_fields.prefix = _
+dotnet_naming_style.private_static_fields.capitalization = camel_case
+dotnet_naming_rule.private_static_fields.symbols = private_static_fields
+dotnet_naming_rule.private_static_fields.style = private_fields
+
+# New-line preferences (Allman brace style — standard C# convention)
+csharp_new_line_before_open_brace = all
+csharp_new_line_before_else = true
+csharp_new_line_before_catch = true
+csharp_new_line_before_finally = true
+
+# Indentation
+indent_style = space
+indent_size = 4
+
+[*.xml]
+indent_style = space
+indent_size = 2
+
+[*.{yml,yaml}]
+indent_style = space
+indent_size = 2
+
+[*.{json,jsonc}]
+indent_style = space
+indent_size = 2
+
+[*]
+end_of_line = crlf
+insert_final_newline = true
+charset = utf-8
+
+# ---------------------------------------------------------------- analyzers ---
+# .NET analyzers are enabled in Directory.Build.props. CI builds with -warnaserror, so every rule
+# left at warning level has to stay clean. The rules below are deliberately turned off rather than
+# fixed: they are style or micro-performance preferences whose hits would drown the correctness rules
+# that matter (CA1305 culture handling, CA2016 token forwarding, CA2201 reserved exception types), all
+# of which stay on.
+[*.cs]
+
+# High-performance LoggerMessage delegates instead of ILogger extension calls. Not worth the
+# ceremony at this call volume.
+dotnet_diagnostic.CA1848.severity = none
+
+# String interpolation in a logging call. Same reasoning as CA1848.
+dotnet_diagnostic.CA1873.severity = none
+
+# Public fields / static members on generic types / naming preferences — style, not correctness.
+dotnet_diagnostic.CA1000.severity = none
+dotnet_diagnostic.CA1051.severity = none
+dotnet_diagnostic.CA1716.severity = none
+dotnet_diagnostic.CA1725.severity = none
+
+# Malformed logging templates (placeholder count vs arguments). A duplicated {Name} placeholder
+# throws FormatException inside a catch block and can kill a retry loop; the repetition needs its own
+# guard, but count mismatches fail here.
+dotnet_diagnostic.CA2017.severity = error
+
+# Type names ending in 'Collection'. Some specs name their own type that way (GeoJSON's FeatureCollection);
+# renaming it to satisfy the rule would make the contract harder to read.
+dotnet_diagnostic.CA1711.severity = none
+
+# ------------------------------------------------------------ analyzers: tests ---
+# Underscored test names are the xUnit convention and read as sentences in the runner output.
+[tests/**.cs]
+# A namespace follows the project (Ballast.<Name>.Tests), not the folder.
+dotnet_style_namespace_match_folder = false
+# Same reason: IDE0130 would ask every moved file to change its namespace to its folder.
+dotnet_diagnostic.IDE0130.severity = none
+dotnet_diagnostic.CA1707.severity = none
+
+# xunit.v3: pass TestContext.Current.CancellationToken to every awaited call in a test. At warning level
+# `dotnet format --verify-no-changes` (the CI lint) would rewrite every call site in a suite, so it is a
+# suggestion. Cancelling an aborted test run sooner is not worth that churn; new tests may still pass the token.
+dotnet_diagnostic.xUnit1051.severity = suggestion
+
+# Markdown is LF-canonical per .gitattributes (*.md eol=lf). Without this, an editorconfig-aware editor
+# would save CRLF back into documents. Last matching section wins, so this sits after [*].
+[*.md]
+end_of_line = lf
