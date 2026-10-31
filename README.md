@@ -19,6 +19,12 @@ Each library's usage guide, with every option and every way it fails, is listed 
 Preview. Version 0.1.0-preview.1 is built and packed here. It is not yet published to nuget.org, and the APIs can still
 change before 1.0.
 
+## Releases
+
+Only the owner publishes. A release is a version tag, and the owner approves its publish step before any package reaches
+nuget.org. See [docs/releasing.md](docs/releasing.md) for the steps, and [docs/setup/publishing.md](docs/setup/publishing.md)
+for the one-time setup of the GitHub and nuget.org accounts.
+
 ## Licence
 
 Ballast is licensed under the [Mozilla Public License 2.0](LICENSE). If you change Ballast itself and share that change,

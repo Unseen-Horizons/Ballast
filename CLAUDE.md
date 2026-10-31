@@ -47,3 +47,5 @@ Build, test and pack commands are in `CONTRIBUTING.md`.
    - Async methods take `CancellationToken ct = default` as the last parameter and pass it to every awaited call.
    - Defaults for strings are `string.Empty`, never `""` and never `null!`.
 10. **Files.** Do not change `LICENSE`. Do not add generated output (`bin/`, `obj/`, `artifacts/`) to the repository.
+11. **Releases.** Only `.github/workflows/release.yml` publishes, and only after the owner approves the run in the
+    `release` environment. Claude never pushes a package or a release tag. See `docs/releasing.md`.
