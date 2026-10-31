@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Title>Ballast.Text</Title>
+    <Description>Accent-free text folding and a personal-data masker.</Description>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,57 @@
+name: CI
+
+# Every push and every pull request. Ballast has no release workflow yet: packages are built and uploaded
+# here, and publishing is a later step.
+
+on:
+  push:
+  pull_request:
+
+# Read-only: nothing here writes to the repository.
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build, format, test and pack
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Cache NuGet packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/*.props') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      - name: Restore
+        run: dotnet restore Ballast.slnx
+
+      # Warnings are errors: an undocumented public member, a missing file header or an analyzer finding fails here.
+      - name: Build
+        run: dotnet build Ballast.slnx --no-restore -warnaserror
+
+      - name: Lint
+        run: dotnet format Ballast.slnx --verify-no-changes --no-restore
+
+      - name: Test
+        run: dotnet test --solution Ballast.slnx --no-restore
+
+      # CI=true (set by GitHub Actions) turns on Source Link and deterministic paths for the packages.
+      - name: Pack
+        run: dotnet pack Ballast.slnx -c Release --no-restore -o artifacts/packages
+
+      - name: Upload packages
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: packages
+          path: artifacts/packages/
+          if-no-files-found: error

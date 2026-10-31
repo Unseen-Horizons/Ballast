@@ -1,0 +1,62 @@
+<Project>
+
+  <!--
+    Shared build settings for every project in this repository. Every library targets net10.0 and depends on
+    no package. Every public member is documented: CS1591 is a warning, and CI builds with -warnaserror.
+    The analyzers are on so that correctness rules (disposal, async misuse, culture-sensitive formatting) are
+    enforced at build time.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!--
+    Version: one shared version for every package. Each release bumps these two lines and the changelog.
+  -->
+  <PropertyGroup>
+    <VersionPrefix>0.1.0</VersionPrefix>
+    <VersionSuffix>preview.1</VersionSuffix>
+  </PropertyGroup>
+
+  <!--
+    Package metadata, the same for every package. The repository address is not set yet (there is no git
+    remote), so PackageProjectUrl and RepositoryUrl are left out until it exists.
+  -->
+  <PropertyGroup>
+    <Authors>Unseen Horizons</Authors>
+    <Company>Unseen Horizons</Company>
+    <Copyright>Copyright (c) 2026 Unseen Horizons</Copyright>
+    <PackageLicenseExpression>MPL-2.0</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>ballast</PackageTags>
+    <RepositoryType>git</RepositoryType>
+  </PropertyGroup>
+
+  <!--
+    Symbols and reproducible builds. Symbols ship as .snupkg; sources are embedded so a debugger can read a
+    library's code even when the repository is not at hand.
+  -->
+  <PropertyGroup>
+    <Deterministic>true</Deterministic>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+    <EmbedUntrackedSources>true</EmbedUntrackedSources>
+  </PropertyGroup>
+
+  <!--
+    CI only. GitHub Actions sets CI=true. The Source Link package itself is added to the library projects in
+    src/Directory.Build.props, also only in CI, so a local build needs no git remote and gives no warning about it.
+  -->
+  <PropertyGroup Condition="'$(CI)' == 'true'">
+    <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,15 @@
+# Build output
+bin/
+obj/
+artifacts/
+TestResults/
+
+# Visual Studio and Rider
+.vs/
+.idea/
+*.user
+*.suo
+*.DotSettings.user
+
+# Local tool state
+.claude/settings.local.json

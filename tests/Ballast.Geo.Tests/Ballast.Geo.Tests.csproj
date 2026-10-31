@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Ballast.Geo\Ballast.Geo.csproj" />
+  </ItemGroup>
+
+</Project>

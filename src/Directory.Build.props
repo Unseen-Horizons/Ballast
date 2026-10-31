@@ -1,0 +1,36 @@
+<Project>
+
+  <!--
+    Imports the repo-root Directory.Build.props first. MSBuild imports only the nearest
+    Directory.Build.props, so without this line the shared settings would silently switch off.
+  -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <!--
+    Every library is a package. IsTrimmable and IsAotCompatible turn on the trimming and AOT analyzers, so a
+    library that uses reflection in a way a trimmed or AOT-compiled app cannot support fails the build.
+    Mobile apps trim their code, so a library has to survive trimming.
+  -->
+  <PropertyGroup>
+    <IsPackable>true</IsPackable>
+    <IsTrimmable>true</IsTrimmable>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+  <!--
+    The package's readme is the README.md in its own folder. It is packed at the top of the package, where
+    NuGet shows it.
+  -->
+  <ItemGroup>
+    <None Include="$(MSBuildProjectDirectory)\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <!--
+    Source Link, CI only (see the root Directory.Build.props). It maps each embedded line of source to its
+    place in the repository, so a debugger can open the code at the matching commit.
+  -->
+  <ItemGroup Condition="'$(CI)' == 'true'">
+    <PackageReference Include="Microsoft.SourceLink.GitHub" PrivateAssets="All" />
+  </ItemGroup>
+
+</Project>
