@@ -20,6 +20,7 @@
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
   </ItemGroup>
   <ItemGroup Label="Test projects (Microsoft.Testing.Platform, see global.json)">
@@ -30,6 +31,8 @@
   </ItemGroup>
   <ItemGroup Label="Tests of the server libraries (an in-memory web host, and SQL Server)">
     <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
     <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Data.SqlClient" Version="6.1.7" />
     <!-- Transitive, through Microsoft.Data.SqlClient. 10.0.0 to 10.0.12 have GHSA-846f-f764-76mx (high) and GHSA-2fmv-rv2c-59x7

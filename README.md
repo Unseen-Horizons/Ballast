@@ -13,6 +13,7 @@ the basic libraries depend on no other package.
 - [Ballast.Money](src/Ballast.Money): currency codes, rounding to minor units, line totals and money formatting.
 - [Ballast.Translations](src/Ballast.Translations): parity checks for .resx and JSON translations, and a scan for the keys source code asks for.
 - [Ballast.Email](src/Ballast.Email): e-mail through SendGrid's web API without an SDK, the send rules, an address shape check, and a send-once ledger.
+- [Ballast.Http](src/Ballast.Http): outbound HTTP safety: a public-address guard, one redirect rule set, capped bodies, per-host credentials, safe log URLs, Retry-After resilience and a polite fetcher.
 
 Each library's usage guide, with every option and every way it fails, is listed in [docs/README.md](docs/README.md).
 
