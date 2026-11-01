@@ -9,3 +9,4 @@ has a short example that runs as written.
 - [Ballast.Text](Text.md): text folding and the personal-data masker.
 - [Ballast.Geo](Geo.md): coordinate checks, distance, bounding boxes and polygons.
 - [Ballast.Money](Money.md): currency codes, rounding, totals and formatting.
+- [Ballast.AspNetCore](AspNetCore.md): problem answers, exception mappings, rate limits, security headers, startup checks and forwarded headers.

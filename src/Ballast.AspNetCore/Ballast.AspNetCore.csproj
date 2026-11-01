@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Title>Ballast.AspNetCore</Title>
+    <Description>ASP.NET Core house rules: problem answers with stable codes and trace ids, exception mappings, a 404 for an unknown API route, rate limits, security headers, startup secret checks and forwarded headers.</Description>
+  </PropertyGroup>
+
+  <!--
+    The problem answers and the validation answers are ASP.NET Core MVC types, and MVC is not trim-safe or AOT-safe.
+    The trimming and AOT analyzers would flag framework code this library does not own, so the library is not marked
+    trimmable or AOT-compatible. The shared settings in src/Directory.Build.props switch both on, and this file switches them off.
+  -->
+  <PropertyGroup>
+    <IsTrimmable>false</IsTrimmable>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Ballast.Errors\Ballast.Errors.csproj" />
+  </ItemGroup>
+
+</Project>

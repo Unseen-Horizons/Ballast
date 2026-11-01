@@ -14,3 +14,4 @@ Not yet published. The first preview: six libraries, all new.
 - **Ballast.Text**: accent-free text folding and a personal-data masker.
 - **Ballast.Geo**: coordinate checks, distance, bounding boxes and polygon containment.
 - **Ballast.Money**: currency codes, rounding to minor units, line totals and money formatting.
+- **Ballast.AspNetCore**: problem answers with a stable code and trace reference, exception mappings, a 404 for unknown API routes, fixed-window rate limits, security headers, startup secret checks and forwarded headers from a proxy list.
