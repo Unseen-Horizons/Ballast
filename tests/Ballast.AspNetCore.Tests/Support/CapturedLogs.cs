@@ -58,7 +58,7 @@ internal sealed class CapturedLogs : ILoggerProvider
 
         public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
         {
-            var scopes = new List<object>();
+            List<object> scopes = [];
             for (var node = _scope.Value; node is not null; node = node.Parent)
             {
                 scopes.Insert(0, node.State);
