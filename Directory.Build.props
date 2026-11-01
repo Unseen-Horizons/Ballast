@@ -2,7 +2,7 @@
 
   <!--
     Shared build settings for every project in this repository. Every library targets net10.0 and depends on
-    no package. Every public member is documented: CS1591 is a warning, and CI builds with -warnaserror.
+    no package, except Ballast.Http, which depends on the Microsoft.Extensions packages. Every public member is documented: CS1591 is a warning, and CI builds with -warnaserror.
     The analyzers are on so that correctness rules (disposal, async misuse, culture-sensitive formatting) are
     enforced at build time.
   -->
