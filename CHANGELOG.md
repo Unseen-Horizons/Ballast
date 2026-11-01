@@ -14,3 +14,4 @@ Not yet published. The first preview: six libraries, all new.
 - **Ballast.Text**: accent-free text folding and a personal-data masker.
 - **Ballast.Geo**: coordinate checks, distance, bounding boxes and polygon containment.
 - **Ballast.Money**: currency codes, rounding to minor units, line totals and money formatting.
+- **Ballast.SqlServer**: SQL error classifiers that look through the whole exception chain, an enum-to-text and restrict-deletes model convention, a retrying transaction helper, a claim helper, a sequence read, a `GO` batch splitter, an isolation-level reset interceptor, a collation check and a developer-database check for connection strings.

@@ -3,8 +3,8 @@
     Central package management. Every package version is set here, once, so a bump cannot drift between
     projects. Add a package here, then reference it without a Version in the project file.
 
-    The six libraries depend on no package. The packages below are for the test projects and for Source Link,
-    which only CI uses.
+    The six basic libraries depend on no package. The packages below are for the test projects, for Source Link,
+    which only CI uses, and for the libraries that need a package of their own (Ballast.SqlServer, in its own group).
   -->
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
@@ -19,5 +19,17 @@
   <ItemGroup Label="Build-time, CI only">
     <!-- The 10.0.x line of the .NET SDK pinned in global.json. -->
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.401" />
+  </ItemGroup>
+  <ItemGroup Label="Ballast.SqlServer: EF Core 10 GA and the SQL Server client (.NET 10 GA version, so an app on a later 10.0.x patch never meets a downgrade)">
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.SqlServer" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Data.SqlClient" Version="6.1.7" />
+    <!--
+      Pinned: Microsoft.Data.SqlClient 6.1.7 resolves System.Security.Cryptography.Pkcs 9.0.11, which has a high and a moderate
+      denial-of-service advisory (NU1903, NU1902). 10.0.0 has the same advisories. 10.0.13 is the first patched 10.x (the
+      apps pin the same version), so Ballast takes it too.
+    -->
+    <PackageVersion Include="System.Security.Cryptography.Pkcs" Version="10.0.13" />
+    <!-- Test only: the in-memory provider, to test the path of a provider with no collation. Not packed. -->
+    <PackageVersion Include="Microsoft.EntityFrameworkCore.InMemory" Version="10.0.0" />
   </ItemGroup>
 </Project>

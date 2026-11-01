@@ -1,8 +1,8 @@
 <Project>
 
   <!--
-    Shared build settings for every project in this repository. Every library targets net10.0 and depends on
-    no package. Every public member is documented: CS1591 is a warning, and CI builds with -warnaserror.
+    Shared build settings for every project in this repository. Every library targets net10.0. The six basic
+    libraries depend on no package; a library that needs one (Ballast.SqlServer) names it in its own csproj. Every public member is documented: CS1591 is a warning, and CI builds with -warnaserror.
     The analyzers are on so that correctness rules (disposal, async misuse, culture-sensitive formatting) are
     enforced at build time.
   -->
