@@ -1,0 +1,9 @@
+{
+  "save": "Spremi",
+  "cancel": "Odustani",
+  "greeting": "Bok, {name}!",
+  "dialog": {
+    "title": "Postavke",
+    "close": "Zatvori"
+  }
+}
