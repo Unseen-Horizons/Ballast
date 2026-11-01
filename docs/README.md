@@ -14,3 +14,4 @@ has a short example that runs as written.
 - [Ballast.Storage](Storage.md): atomic writes, leftover sweep, safe relative paths, the data folder and file types.
 - [Ballast.AspNetCore](AspNetCore.md): problem answers, exception mappings, rate limits, security headers, startup checks and forwarded headers.
 - [Ballast.Health](Health.md): readiness and liveness routes, build info, database and schema checks, startup gates, warm-up and the startup hold.
+- [Ballast.Jobs](Jobs.md): the job lock, leader-only hosted services, the 409 for admin actions and the job-lock readiness check.
