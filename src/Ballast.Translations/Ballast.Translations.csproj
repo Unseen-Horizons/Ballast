@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Title>Ballast.Translations</Title>
+    <Description>Parity checks for translation files: the same keys, no blank value, the same placeholders, a same-text allow-list, and a scan for the keys code asks for. Reads .resx and flat JSON.</Description>
+  </PropertyGroup>
+
+</Project>

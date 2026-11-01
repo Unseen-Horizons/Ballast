@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <data name="save" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="cancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="greeting" xml:space="preserve">
+    <value>Hello, {name}!</value>
+  </data>
+  <data name="item_count" xml:space="preserve">
+    <value>{0} items</value>
+  </data>
+  <data name="price" xml:space="preserve">
+    <value>Price {0:N2} EUR</value>
+  </data>
+  <data name="unit" xml:space="preserve">
+    <value>km</value>
+  </data>
+  <data name="title" xml:space="preserve">
+    <value>Settings</value>
+  </data>
+</root>
