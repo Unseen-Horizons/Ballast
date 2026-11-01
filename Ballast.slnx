@@ -6,6 +6,7 @@
     <Project Path="src/Ballast.Text/Ballast.Text.csproj" />
     <Project Path="src/Ballast.Geo/Ballast.Geo.csproj" />
     <Project Path="src/Ballast.Money/Ballast.Money.csproj" />
+    <Project Path="src/Ballast.Email/Ballast.Email.csproj" />
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="tests/Ballast.Errors.Tests/Ballast.Errors.Tests.csproj" />
@@ -14,5 +15,6 @@
     <Project Path="tests/Ballast.Text.Tests/Ballast.Text.Tests.csproj" />
     <Project Path="tests/Ballast.Geo.Tests/Ballast.Geo.Tests.csproj" />
     <Project Path="tests/Ballast.Money.Tests/Ballast.Money.Tests.csproj" />
+    <Project Path="tests/Ballast.Email.Tests/Ballast.Email.Tests.csproj" />
   </Folder>
 </Solution>

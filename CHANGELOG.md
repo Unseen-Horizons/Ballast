@@ -14,3 +14,4 @@ Not yet published. The first preview: six libraries, all new.
 - **Ballast.Text**: accent-free text folding and a personal-data masker.
 - **Ballast.Geo**: coordinate checks, distance, bounding boxes and polygon containment.
 - **Ballast.Money**: currency codes, rounding to minor units, line totals and money formatting.
+- **Ballast.Email**: e-mail through SendGrid's web API without an SDK, the send rules and address shape check, and a send-once ledger over an app's store.

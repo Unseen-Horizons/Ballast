@@ -11,6 +11,7 @@ the basic libraries depend on no other package.
 - [Ballast.Text](src/Ballast.Text): accent-free text folding and a personal-data masker.
 - [Ballast.Geo](src/Ballast.Geo): coordinate checks, distance, bounding boxes and polygon containment.
 - [Ballast.Money](src/Ballast.Money): currency codes, rounding to minor units, line totals and money formatting.
+- [Ballast.Email](src/Ballast.Email): e-mail through SendGrid's web API without an SDK, the send rules, an address shape check, and a send-once ledger.
 
 Each library's usage guide, with every option and every way it fails, is listed in [docs/README.md](docs/README.md).
 
