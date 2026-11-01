@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Title>Ballast.Health</Title>
+    <Description>Readiness and liveness for an ASP.NET Core API: build info, database and schema checks, startup gates, warm-up and a startup hold.</Description>
+  </PropertyGroup>
+
+  <!--
+    Health needs ASP.NET Core (the health endpoints, the hosted startup hold) and Entity Framework Core (the database and
+    schema checks). EF Core is not trim-safe or AOT-compatible, so the library is not marked as either: marking it would
+    promise a trimmed or AOT app a thing the EF Core code cannot keep.
+  -->
+  <PropertyGroup>
+    <IsTrimmable>false</IsTrimmable>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+  </ItemGroup>
+
+</Project>
