@@ -3,7 +3,7 @@
     Central package management. Every package version is set here, once, so a bump cannot drift between
     projects. Add a package here, then reference it without a Version in the project file.
 
-    The six libraries depend on no package. The packages below are for the test projects and for Source Link,
+    The six basic libraries depend on no package. Ballast.Email's packages are in their own group below. The other packages are for the test projects and for Source Link,
     which only CI uses.
   -->
   <PropertyGroup>
@@ -15,6 +15,13 @@
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
     <PackageVersion Include="xunit.v3" Version="4.0.2" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />
+  </ItemGroup>
+  <ItemGroup Label="Ballast.Email (SendGrid through HttpClient, no SDK)">
+    <PackageVersion Include="Microsoft.Extensions.Configuration.Abstractions" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
   </ItemGroup>
   <ItemGroup Label="Build-time, CI only">
     <!-- The 10.0.x line of the .NET SDK pinned in global.json. -->

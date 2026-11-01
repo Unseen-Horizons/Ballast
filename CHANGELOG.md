@@ -15,3 +15,4 @@ Not yet published. The first preview: six libraries, all new.
 - **Ballast.Geo**: coordinate checks, distance, bounding boxes and polygon containment.
 - **Ballast.Money**: currency codes, rounding to minor units, line totals and money formatting.
 - **Ballast.Translations**: parity checks for .resx and JSON translations (the same keys, no blank text, the same placeholders, a same-text allow-list) and a scan for the keys source code asks for.
+- **Ballast.Email**: e-mail through SendGrid's web API without an SDK, the send rules and address shape check, and a send-once ledger over an app's store.

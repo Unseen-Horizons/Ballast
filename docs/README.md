@@ -10,3 +10,4 @@ has a short example that runs as written.
 - [Ballast.Geo](Geo.md): coordinate checks, distance, bounding boxes and polygons.
 - [Ballast.Money](Money.md): currency codes, rounding, totals and formatting.
 - [Ballast.Translations](Translations.md): parity checks for .resx and JSON translations, and a scan for the keys source code asks for.
+- [Ballast.Email](Email.md): SendGrid sending, the send rules, the address check and the send-once ledger. Setup: [SendGrid](setup/sendgrid.md).
