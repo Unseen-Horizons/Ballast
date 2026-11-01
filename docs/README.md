@@ -9,3 +9,4 @@ has a short example that runs as written.
 - [Ballast.Text](Text.md): text folding and the personal-data masker.
 - [Ballast.Geo](Geo.md): coordinate checks, distance, bounding boxes and polygons.
 - [Ballast.Money](Money.md): currency codes, rounding, totals and formatting.
+- [Ballast.Health](Health.md): readiness and liveness routes, build info, database and schema checks, startup gates, warm-up and the startup hold.

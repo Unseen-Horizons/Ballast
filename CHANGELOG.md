@@ -14,3 +14,4 @@ Not yet published. The first preview: six libraries, all new.
 - **Ballast.Text**: accent-free text folding and a personal-data masker.
 - **Ballast.Geo**: coordinate checks, distance, bounding boxes and polygon containment.
 - **Ballast.Money**: currency codes, rounding to minor units, line totals and money formatting.
+- **Ballast.Health**: readiness and liveness routes, build info, database and schema checks, startup gates, warm-up and a startup hold.
