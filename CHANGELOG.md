@@ -14,3 +14,4 @@ Not yet published. The first preview: six libraries, all new.
 - **Ballast.Text**: accent-free text folding and a personal-data masker.
 - **Ballast.Geo**: coordinate checks, distance, bounding boxes and polygon containment.
 - **Ballast.Money**: currency codes, rounding to minor units, line totals and money formatting.
+- **Ballast.Storage**: atomic file writes (overwrite or create-new), removal of leftover temporary files, safe relative paths with a reason for each refusal, the data folder check, and file types read from the first bytes.
