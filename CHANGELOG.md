@@ -4,7 +4,7 @@ Every library in Ballast carries the same version. Each shared version has one s
 
 ## 0.1.0-preview.1
 
-Not yet published. The first preview: six libraries, all new.
+Not yet published. The first preview: fourteen libraries, all new.
 
 ### Added
 
