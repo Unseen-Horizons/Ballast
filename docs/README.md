@@ -12,3 +12,4 @@ has a short example that runs as written.
 - [Ballast.Translations](Translations.md): parity checks for .resx and JSON translations, and a scan for the keys source code asks for.
 - [Ballast.Email](Email.md): SendGrid sending, the send rules, the address check and the send-once ledger. Setup: [SendGrid](setup/sendgrid.md).
 - [Ballast.Storage](Storage.md): atomic writes, leftover sweep, safe relative paths, the data folder and file types.
+- [Ballast.AspNetCore](AspNetCore.md): problem answers, exception mappings, rate limits, security headers, startup checks and forwarded headers.

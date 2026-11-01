@@ -9,6 +9,7 @@
     <Project Path="src/Ballast.Translations/Ballast.Translations.csproj" />
     <Project Path="src/Ballast.Email/Ballast.Email.csproj" />
     <Project Path="src/Ballast.Storage/Ballast.Storage.csproj" />
+    <Project Path="src/Ballast.AspNetCore/Ballast.AspNetCore.csproj" />
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="tests/Ballast.Errors.Tests/Ballast.Errors.Tests.csproj" />
@@ -20,5 +21,6 @@
     <Project Path="tests/Ballast.Translations.Tests/Ballast.Translations.Tests.csproj" />
     <Project Path="tests/Ballast.Email.Tests/Ballast.Email.Tests.csproj" />
     <Project Path="tests/Ballast.Storage.Tests/Ballast.Storage.Tests.csproj" />
+    <Project Path="tests/Ballast.AspNetCore.Tests/Ballast.AspNetCore.Tests.csproj" />
   </Folder>
 </Solution>

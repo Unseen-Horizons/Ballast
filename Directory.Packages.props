@@ -23,6 +23,9 @@
     <PackageVersion Include="Microsoft.Extensions.Http" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
   </ItemGroup>
+  <ItemGroup Label="Ballast.AspNetCore tests (in-memory host)">
+    <PackageVersion Include="Microsoft.AspNetCore.TestHost" Version="10.0.0" />
+  </ItemGroup>
   <ItemGroup Label="Build-time, CI only">
     <!-- The 10.0.x line of the .NET SDK pinned in global.json. -->
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.401" />
