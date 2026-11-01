@@ -20,3 +20,4 @@ Not yet published. The first preview: six libraries, all new.
 - **Ballast.AspNetCore**: problem answers with a stable code and trace reference, exception mappings, a 404 for unknown API routes, fixed-window rate limits, security headers, startup secret checks and forwarded headers from a proxy list.
 - **Ballast.Health**: readiness and liveness routes, build info, database and schema checks, startup gates, warm-up and a startup hold.
 - **Ballast.Http**: outbound HTTP safety: the public-address guard, one redirect rule set, capped bodies, per-host credentials, safe URLs for logs, Retry-After resilience, and a polite fetcher.
+- **Ballast.SqlServer**: SQL error classifiers that look through the whole exception chain, an enum-to-text and restrict-deletes model convention, a retrying transaction helper, a claim helper, a sequence read, a `GO` batch splitter, an isolation-level reset interceptor, a collation check and a developer-database check for connection strings.
