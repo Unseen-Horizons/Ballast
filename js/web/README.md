@@ -11,7 +11,7 @@ Nothing is loaded from a CDN, so the page can keep a strict Content-Security-Pol
 Install (the npm package, for the copy step):
 
 ```
-npm install @ballast/web@0.1.0-preview.1
+npm install @ballast/web@0.1.0-preview.2
 ```
 
 ## Example

@@ -18,7 +18,7 @@ a strict Content-Security-Policy: copy the files into the app's `wwwroot` with `
 Install (the npm package, for the copy step):
 
 ```
-npm install @ballast/admin@0.1.0-preview.1
+npm install @ballast/admin@0.1.0-preview.2
 ```
 
 ## Example

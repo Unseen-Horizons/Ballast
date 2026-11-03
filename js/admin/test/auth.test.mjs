@@ -17,7 +17,7 @@ function json(body, status = 200, headers = {}) {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...headers } });
 }
 
-function setup({ tokens = {}, href = `${ORIGIN}/admin/index.html`, fetchImpl } = {}) {
+function setup({ tokens = {}, href = `${ORIGIN}/admin/index.html`, fetchImpl, logoutPath } = {}) {
   const storage = fakeStorage(tokens);
   const location = fakeLocation(href);
   const calls = [];
@@ -25,7 +25,7 @@ function setup({ tokens = {}, href = `${ORIGIN}/admin/index.html`, fetchImpl } =
     calls.push({ input, init });
     return fetchImpl ? fetchImpl(input, init, calls.length) : json({ accessToken: 'new-access', refreshToken: 'new-refresh' });
   };
-  const auth = createAuth({ storage, location, fetch, refreshTimeoutMs: 50 });
+  const auth = createAuth({ storage, location, fetch, refreshTimeoutMs: 50, logoutPath });
   return { auth, storage, location, calls };
 }
 
@@ -95,6 +95,76 @@ describe('createAuth: signing in and out', () => {
     assert.equal(storage.getItem('auth_token'), null);
     assert.equal(storage.getItem('refresh_token'), null);
     assert.deepEqual(location.navigations, ['/admin/login.html']);
+  });
+});
+
+describe('createAuth: signing out with the server', () => {
+  it('posts the refresh token to logoutPath with keepalive, then clears both tokens and opens the sign-in page', async () => {
+    const { auth, storage, location, calls } = setup({
+      tokens: { auth_token: 'a1', refresh_token: 'r1' },
+      logoutPath: '/auth/logout',
+      fetchImpl: () => new Response(null, { status: 204 })
+    });
+
+    assert.equal(await auth.signOut(), true);
+    assert.equal(calls[0].input, '/auth/logout');
+    assert.equal(calls[0].init.method, 'POST');
+    assert.equal(calls[0].init.keepalive, true);
+    assert.deepEqual(JSON.parse(calls[0].init.body), { refreshToken: 'r1' });
+    assert.equal(storage.getItem('auth_token'), null);
+    assert.equal(storage.getItem('refresh_token'), null);
+    assert.deepEqual(location.navigations, ['/admin/login.html']);
+  });
+
+  it('clears the tokens and opens the sign-in page when the server refuses the sign-out', async () => {
+    const { auth, storage, location } = setup({
+      tokens: { auth_token: 'a1', refresh_token: 'r1' },
+      logoutPath: '/auth/logout',
+      fetchImpl: () => json({ title: 'Refused' }, 500)
+    });
+
+    assert.equal(await auth.signOut(), false);
+    assert.equal(storage.getItem('auth_token'), null);
+    assert.equal(storage.getItem('refresh_token'), null);
+    assert.deepEqual(location.navigations, ['/admin/login.html']);
+  });
+
+  it('clears the tokens when the request fails on the network', async () => {
+    const { auth, storage, location } = setup({
+      tokens: { auth_token: 'a1', refresh_token: 'r1' },
+      logoutPath: '/auth/logout',
+      fetchImpl: () => { throw new TypeError('offline'); }
+    });
+
+    assert.equal(await auth.signOut(), false);
+    assert.equal(storage.getItem('auth_token'), null);
+    assert.deepEqual(location.navigations, ['/admin/login.html']);
+  });
+
+  it('clears the tokens when the server does not answer within refreshTimeoutMs', async () => {
+    const { auth, storage, location } = setup({
+      tokens: { auth_token: 'a1', refresh_token: 'r1' },
+      logoutPath: '/auth/logout',
+      fetchImpl: () => new Promise(() => {})
+    });
+
+    assert.equal(await auth.signOut(), false);
+    assert.equal(storage.getItem('auth_token'), null);
+    assert.deepEqual(location.navigations, ['/admin/login.html']);
+  });
+
+  it('posts nothing without a refresh token, and posts nothing at all when logoutPath is null (the default)', async () => {
+    const noRefresh = setup({ tokens: { auth_token: 'a1' }, logoutPath: '/auth/logout' });
+    assert.equal(await noRefresh.auth.signOut(), true);
+    assert.equal(noRefresh.calls.length, 0);
+    assert.equal(noRefresh.storage.getItem('auth_token'), null);
+
+    const noPath = setup({ tokens: { auth_token: 'a1', refresh_token: 'r1' } });
+    noPath.auth.signOut();
+    assert.equal(noPath.calls.length, 0);
+    assert.equal(noPath.storage.getItem('auth_token'), null);
+    assert.equal(noPath.storage.getItem('refresh_token'), null);
+    assert.deepEqual(noPath.location.navigations, ['/admin/login.html']);
   });
 });
 
@@ -232,5 +302,82 @@ describe('createAuth.install: the console\'s fetch', () => {
     const loginAuth = createAuth({ storage: onLogin.storage, location: onLogin.location, fetch: async () => json({}) });
     loginAuth.install({ redirectWhenSignedOut: true });
     assert.deepEqual(onLogin.location.navigations, []);
+  });
+});
+
+describe('createAuth.install with no fetch option: the refresh is never renewed by the wrapper', () => {
+  const realFetch = globalThis.fetch;
+  afterEach(() => { globalThis.fetch = realFetch; });
+
+  // install() wraps globalThis.fetch. No fetch option is passed, so the refresh must use the fetch that was in place before the wrap.
+  function installDefault(tokens, base) {
+    globalThis.fetch = base;
+    const storage = fakeStorage(tokens);
+    const location = fakeLocation(`${ORIGIN}/admin/feeds.html`);
+    const auth = createAuth({ storage, location, refreshTimeoutMs: 15000 });
+    auth.install();
+    return { auth, storage, location };
+  }
+
+  it('auth.refresh() after install() resolves false at once when the server refuses', async () => {
+    const { auth } = installDefault({ refresh_token: 'r1' }, async () => json({ title: 'Refused' }, 401));
+
+    const started = Date.now();
+    assert.equal(await auth.refresh(), false);
+    assert.ok(Date.now() - started < 2000, 'a refused refresh must not wait for the timeout');
+  });
+
+  it('gives a refused refresh at once, not at the timeout, and renews nothing', async () => {
+    const seen = [];
+    const base = async (input) => {
+      seen.push(input);
+      return json({ title: 'Refused' }, 401);
+    };
+    const { storage, location } = installDefault({ auth_token: 'old', refresh_token: 'r1' }, base);
+
+    const started = Date.now();
+    const res = await globalThis.fetch('/admin/stats');
+
+    assert.equal(res.status, 401);
+    assert.ok(Date.now() - started < 2000, 'a refused refresh must not wait for the timeout');
+    assert.deepEqual(seen, ['/admin/stats', '/auth/refresh']);
+    assert.equal(storage.getItem('auth_token'), null);
+    assert.deepEqual(location.navigations, ['/admin/login.html']);
+  });
+
+  it('renews a 401 once: one refresh, then one replay with the new token', async () => {
+    const seen = [];
+    const base = async (input, init) => {
+      seen.push(input);
+      if (input === '/auth/refresh') return json({ accessToken: 'fresh', refreshToken: 'r2' });
+      const bearer = new Headers(init?.headers || {}).get('Authorization');
+      return bearer === 'Bearer fresh' ? json({ ok: true }) : json({ title: 'Expired' }, 401);
+    };
+    const { storage } = installDefault({ auth_token: 'old', refresh_token: 'r1' }, base);
+
+    const res = await globalThis.fetch('/admin/stats');
+
+    assert.equal(res.status, 200);
+    assert.deepEqual(seen, ['/admin/stats', '/auth/refresh', '/admin/stats']);
+    assert.equal(storage.getItem('refresh_token'), 'r2');
+  });
+
+  it('shares one refresh between two concurrent 401s', async () => {
+    const seen = [];
+    const base = async (input, init) => {
+      seen.push(input);
+      if (input === '/auth/refresh') {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        return json({ accessToken: 'fresh', refreshToken: 'r2' });
+      }
+      const bearer = new Headers(init?.headers || {}).get('Authorization');
+      return bearer === 'Bearer fresh' ? json({ ok: true }) : json({ title: 'Expired' }, 401);
+    };
+    installDefault({ auth_token: 'old', refresh_token: 'r1' }, base);
+
+    const results = await Promise.all([globalThis.fetch('/admin/a'), globalThis.fetch('/admin/b')]);
+
+    assert.deepEqual(results.map((res) => res.status), [200, 200]);
+    assert.equal(seen.filter((input) => input === '/auth/refresh').length, 1);
   });
 });

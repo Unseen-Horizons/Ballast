@@ -57,19 +57,31 @@ public static class AdminConsole
     }
 
     /// <summary>
-    /// The <c>Content-Security-Policy</c> header of the console. Scripts come only from the console's own origin, and the page cannot be
-    /// framed, change its base address or post a form anywhere but its own origin.
+    /// The <c>Content-Security-Policy</c> header of the console. Scripts come only from the console's own origin unless the options name
+    /// more (<see cref="AdminConsoleOptions.ScriptSources"/>, or inline scripts with <see cref="AdminConsoleOptions.AllowInlineScripts"/>),
+    /// and the page cannot be framed, change its base address or post a form anywhere but its own origin.
     /// </summary>
     /// <param name="options">The options. Required.</param>
     /// <returns>The policy, in the order the directives are written.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="options"/> is null.</exception>
     /// <exception cref="ArgumentException">
-    /// A source is blank, holds white space, a ';' or a ',', or is <c>*</c>. A source that could end a directive early, or open every
-    /// origin, is refused rather than written.
+    /// A source is blank, holds white space, a ';' or a ',', or is <c>*</c>, or a script source is <c>'unsafe-inline'</c> or
+    /// <c>'unsafe-eval'</c>. A source that could end a directive early, or open every origin, is refused rather than written.
     /// </exception>
     public static string ContentSecurityPolicy(AdminConsoleOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
+
+        var script = new List<string> { "'self'" };
+        if (options.AllowInlineScripts)
+        {
+            script.Add("'unsafe-inline'");
+        }
+
+        // Inline script and eval are reached only through AllowInlineScripts (eval never), so that flag is the one visible switch.
+        RefuseInlineKeywords(options.ScriptSources, nameof(AdminConsoleOptions.ScriptSources));
+
+        script.AddRange(Sources(options.ScriptSources, nameof(AdminConsoleOptions.ScriptSources)));
 
         var style = new List<string> { "'self'" };
         if (options.AllowInlineStyles)
@@ -88,18 +100,27 @@ public static class AdminConsole
         var font = new List<string> { "'self'" };
         font.AddRange(Sources(options.FontSources, nameof(AdminConsoleOptions.FontSources)));
 
-        return string.Join("; ", new[]
-        {
+        List<string> directives =
+        [
             "default-src 'self'",
-            "script-src 'self'",
+            "script-src " + string.Join(' ', script),
             "style-src " + string.Join(' ', style),
             "img-src " + string.Join(' ', image),
             "connect-src " + string.Join(' ', connect),
             "font-src " + string.Join(' ', font),
-            "frame-ancestors 'none'",
-            "base-uri 'self'",
-            "form-action 'self'",
-        });
+        ];
+
+        // worker-src is written only when the console names a worker source. Without it, workers follow script-src.
+        var worker = Sources(options.WorkerSources, nameof(AdminConsoleOptions.WorkerSources));
+        if (worker.Count > 0)
+        {
+            directives.Add("worker-src 'self' " + string.Join(' ', worker));
+        }
+
+        directives.Add("frame-ancestors 'none'");
+        directives.Add("base-uri 'self'");
+        directives.Add("form-action 'self'");
+        return string.Join("; ", directives);
     }
 
     private static List<string> Sources(IEnumerable<string> sources, string name)
@@ -122,5 +143,15 @@ public static class AdminConsole
         }
 
         return valid;
+    }
+
+    private static void RefuseInlineKeywords(IEnumerable<string> sources, string name)
+    {
+        if (sources.Any(source => source is "'unsafe-inline'" or "'unsafe-eval'"))
+        {
+            throw new ArgumentException(
+                "A script source must not be 'unsafe-inline' or 'unsafe-eval'. Inline script is turned on with AllowInlineScripts, and eval is never allowed.",
+                name);
+        }
     }
 }

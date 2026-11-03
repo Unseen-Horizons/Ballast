@@ -78,12 +78,20 @@ code), `message`, `error`, `errors` (field messages, by field name) and `traceId
    `key` is the `code` when the body has one, else the `title`. Text it returns is used. Null or undefined means "no text for
    this key", and the next step applies.
 3. Otherwise the first non-empty of `detail`, `title`, `message` and `error` is used. With nothing, the fallback is used.
-4. Field messages in `errors` are appended after ` — `, as `Field: first; second | Other: third`.
-5. The `traceId` is appended as ` (ref X)`, so a support request can name it.
+4. Field messages in `errors` are appended after ` — `, as `Field: first; second | Other: third`, unless `fieldErrors` is false.
+5. The `traceId` is appended as ` (ref X)`, so a support request can name it, unless the `traceId` option is false.
 
-Options: `fallback` (the text when the body says nothing; `Request failed (STATUS)` by default), `preferDetail` (default false;
-when true, a 4xx answer with both a `code` and a `detail` shows the detail before `codeText` is asked), and `codeText` (asked
-with the `code`, or with the `title` when the body has no `code`).
+Options:
+
+- `fallback`: the text when the body says nothing. `Request failed (STATUS)` by default.
+- `preferDetail`: false by default. When true, a 4xx answer with both a `code` and a `detail` shows the detail before `codeText`
+  is asked.
+- `codeText`: a function, asked with the `code`, or with the `title` when the body has no `code`.
+- `fieldErrors`: true by default. When false, the field messages of `errors` are not appended.
+- `traceId`: true by default. When false, the ` (ref X)` reference is not appended.
+
+With the defaults the output is the full text (steps 4 and 5 included). An app that keeps its own banner text sets `fieldErrors`
+or `traceId` to false to keep it; with both false the output is the one line from steps 1 to 3.
 
 Failures: `problemMessage` never throws, and a status that is not a number is written as it is. A `codeText` that throws is not
 caught, because it is the page's own function; its error reaches the caller.
@@ -189,8 +197,8 @@ served from the app's own origin and the Content-Security-Policy stays `script-s
 copy from a packed `.tgz`:
 
 ```
-node scripts/vendor-copy.mjs copy  --package artifacts/packages/ballast-web-0.1.0-preview.1.tgz --app <wwwroot>
-node scripts/vendor-copy.mjs check --package artifacts/packages/ballast-web-0.1.0-preview.1.tgz --app <wwwroot>
+node scripts/vendor-copy.mjs copy  --package artifacts/packages/ballast-web-0.1.0-preview.2.tgz --app <wwwroot>
+node scripts/vendor-copy.mjs check --package artifacts/packages/ballast-web-0.1.0-preview.2.tgz --app <wwwroot>
 ```
 
 - `--dest` is relative to `--app`. It defaults to `vendor/ballast/<name>`, where `<name>` is the package name without its

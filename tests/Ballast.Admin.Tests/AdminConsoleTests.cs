@@ -53,6 +53,68 @@ public class AdminConsoleTests
     }
 
     [Fact]
+    public void Turning_inline_scripts_on_puts_unsafe_inline_first_in_script_src()
+    {
+        var options = new AdminConsoleOptions { AllowInlineScripts = true };
+        options.ScriptSources.Add("https://cdn.jsdelivr.net");
+
+        Assert.Contains("script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; ", AdminConsole.ContentSecurityPolicy(options));
+    }
+
+    [Fact]
+    public void Worker_sources_are_written_only_when_one_is_named()
+    {
+        Assert.DoesNotContain("worker-src", AdminConsole.ContentSecurityPolicy(new AdminConsoleOptions()));
+
+        var options = new AdminConsoleOptions();
+        options.WorkerSources.Add("blob:");
+
+        Assert.Contains(
+            "connect-src 'self'; font-src 'self'; worker-src 'self' blob:; frame-ancestors 'none';",
+            AdminConsole.ContentSecurityPolicy(options));
+    }
+
+    [Fact]
+    public void A_policy_with_inline_scripts_a_cdn_and_workers_has_the_same_directives_as_its_hand_written_string()
+    {
+        // The string a console's own /admin rule writes by hand, copied from the app as it is written there.
+        const string transitInfoPolicy =
+            "default-src 'self'; " +
+            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " +
+            "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " +
+            "font-src 'self' data: https://cdn.jsdelivr.net; " +
+            "img-src 'self' data: blob: https:; connect-src 'self' https:; worker-src 'self' blob:; " +
+            "frame-ancestors 'none'; base-uri 'self'; form-action 'self'";
+        var options = new AdminConsoleOptions { AllowInlineScripts = true };
+        options.ScriptSources.Add("https://cdn.jsdelivr.net");
+        options.StyleSources.Add("https://cdn.jsdelivr.net");
+        options.FontSources.Add("data:");
+        options.FontSources.Add("https://cdn.jsdelivr.net");
+        options.ImageSources.Add("blob:");
+        options.ImageSources.Add("https:");
+        options.ConnectSources.Add("https:");
+        options.WorkerSources.Add("blob:");
+
+        var policy = AdminConsole.ContentSecurityPolicy(options);
+
+        // The library's fixed order puts img-src before font-src, and worker-src after font-src. The order is kept, because the default
+        // output must not move. The directives and their sources are the same as the TransitInfoAPI string.
+        Assert.Equal(
+            "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: blob: https:; connect-src 'self' https:; font-src 'self' data: https://cdn.jsdelivr.net; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
+            policy);
+        Assert.Equal(Canonical(transitInfoPolicy), Canonical(policy));
+    }
+
+    // The directives sorted by name, each with its sources in order, so two policies are compared by content and not by order.
+    private static string Canonical(string policy)
+    {
+        return string.Join("; ", policy.Split("; ")
+            .Select(directive => directive.Split(' '))
+            .OrderBy(parts => parts[0], StringComparer.Ordinal)
+            .Select(parts => string.Join(' ', parts)));
+    }
+
+    [Fact]
     public void No_policy_ever_allows_inline_script_or_a_wildcard_or_framing()
     {
         var options = new AdminConsoleOptions();
@@ -88,6 +150,8 @@ public class AdminConsoleTests
     [InlineData(nameof(AdminConsoleOptions.FontSources))]
     [InlineData(nameof(AdminConsoleOptions.ImageSources))]
     [InlineData(nameof(AdminConsoleOptions.ConnectSources))]
+    [InlineData(nameof(AdminConsoleOptions.ScriptSources))]
+    [InlineData(nameof(AdminConsoleOptions.WorkerSources))]
     public void Every_source_list_refuses_a_wildcard(string listName)
     {
         var options = new AdminConsoleOptions();
@@ -96,12 +160,26 @@ public class AdminConsoleTests
             nameof(AdminConsoleOptions.StyleSources) => options.StyleSources,
             nameof(AdminConsoleOptions.FontSources) => options.FontSources,
             nameof(AdminConsoleOptions.ImageSources) => options.ImageSources,
+            nameof(AdminConsoleOptions.ScriptSources) => options.ScriptSources,
+            nameof(AdminConsoleOptions.WorkerSources) => options.WorkerSources,
             _ => options.ConnectSources,
         };
         list.Add("*");
 
         var ex = Assert.Throws<ArgumentException>(() => AdminConsole.ContentSecurityPolicy(options));
         Assert.Equal(listName, ex.ParamName);
+    }
+
+    [Theory]
+    [InlineData("'unsafe-inline'")]
+    [InlineData("'unsafe-eval'")]
+    public void Script_sources_refuse_the_inline_and_eval_keywords_so_AllowInlineScripts_is_the_one_switch(string source)
+    {
+        var options = new AdminConsoleOptions();
+        options.ScriptSources.Add(source);
+
+        var ex = Assert.Throws<ArgumentException>(() => AdminConsole.ContentSecurityPolicy(options));
+        Assert.Equal(nameof(AdminConsoleOptions.ScriptSources), ex.ParamName);
     }
 
     [Fact]

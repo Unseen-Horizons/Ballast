@@ -25,9 +25,24 @@ public sealed class AdminConsoleOptions
 
     /// <summary>
     /// Whether the style sheets may hold inline styles (<c>'unsafe-inline'</c> in <c>style-src</c>). The default is true, because the
-    /// consoles write inline style attributes. Scripts are never allowed inline.
+    /// consoles write inline style attributes. Scripts are never allowed inline unless <see cref="AllowInlineScripts"/> is set.
     /// </summary>
     public bool AllowInlineStyles { get; set; } = true;
+
+    /// <summary>
+    /// Whether scripts may be written inline (<c>'unsafe-inline'</c> in <c>script-src</c>). The default is false, and a console should keep
+    /// it so. With it on, markup that the page renders could run as script if its escaping ever failed, so the escaping is no longer
+    /// backed up by the policy. Turn it on only for a console whose own pages need inline script, and say why in the app.
+    /// </summary>
+    public bool AllowInlineScripts { get; set; }
+
+    /// <summary>
+    /// Extra origins or keywords for <c>script-src</c>, after <c>'self'</c> and after <c>'unsafe-inline'</c> when
+    /// <see cref="AllowInlineScripts"/> is set. Each origin named here can run code in the console, so name each on purpose. The same
+    /// rules as <see cref="StyleSources"/> apply, and <c>'unsafe-inline'</c> and <c>'unsafe-eval'</c> are refused here: inline script
+    /// is turned on with <see cref="AllowInlineScripts"/>, and eval is never allowed.
+    /// </summary>
+    public IList<string> ScriptSources { get; } = [];
 
     /// <summary>
     /// Extra origins or keywords for <c>style-src</c>, after <c>'self'</c>. Each must hold no white space, no ';', no ',' and not <c>*</c>.
@@ -48,4 +63,10 @@ public sealed class AdminConsoleOptions
     /// Extra origins or keywords for <c>connect-src</c>, after <c>'self'</c>. The same rules as <see cref="StyleSources"/> apply.
     /// </summary>
     public IList<string> ConnectSources { get; } = [];
+
+    /// <summary>
+    /// Extra origins or keywords for <c>worker-src</c>, after <c>'self'</c>. The directive is written only when this list is not empty.
+    /// Without it, workers follow <c>script-src</c>, which is <c>'self'</c> by default. The same rules as <see cref="StyleSources"/> apply.
+    /// </summary>
+    public IList<string> WorkerSources { get; } = [];
 }

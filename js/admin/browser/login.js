@@ -97,8 +97,14 @@
    * @param {string} [options.homePath] where to go after sign-in when there is no back-link, '/admin/' by default.
    * @param {string} [options.adminPrefix] the only path prefix a back-link may name, '/admin/' by default.
    * @param {string} [options.loginPageSuffix] the sign-in page's file name, '/login.html' by default.
-   * @param {object} [options.messages] Microsoft refusal texts that replace the defaults.
-   * @param {object} [options.text] the wording of the page, which replaces the defaults.
+   * @param {object|function} [options.messages] Microsoft refusal texts that replace the defaults. A function returns them, and is
+   *   called each time the page draws one.
+   * @param {object|function} [options.text] the wording of the page, which replaces the defaults. A function returns it, and is
+   *   called each time the page draws text, so the wording follows the language.
+   * @param {string|null} [options.languageEvent] 'languageChanged' by default: the event that draws the page's text again. The
+   *   @ballast/web loader dispatches it on the window when the language changes (detail.lang holds the new language). null turns
+   *   the redraw off.
+   * @param {object} [options.eventTarget] what languageEvent is listened for: the window, by default.
    * @param {object} [options.document] document, by default.
    * @param {object} [options.location] window.location, by default.
    * @param {object} [options.history] window.history, by default.
@@ -120,8 +126,18 @@
     var homePath = opt.homePath || '/admin/';
     var adminPrefix = opt.adminPrefix || '/admin/';
     var loginPageSuffix = opt.loginPageSuffix || '/login.html';
-    var messages = opt.messages || {};
-    var text = Object.assign({}, DEFAULT_TEXT, opt.text || {});
+    var languageEvent = opt.languageEvent === undefined ? 'languageChanged' : opt.languageEvent;
+
+    // The wording and the refusal texts are read each time they are drawn, so a function (for a language that has changed) is asked again.
+    function wording() {
+      var source = typeof opt.text === 'function' ? opt.text() : opt.text;
+      return Object.assign({}, DEFAULT_TEXT, source || {});
+    }
+
+    function refusalTexts() {
+      var source = typeof opt.messages === 'function' ? opt.messages() : opt.messages;
+      return source || {};
+    }
 
     function doc() { return opt.document || root.document; }
     function loc() { return opt.location || root.location; }
@@ -138,29 +154,83 @@
       });
     }
 
-    function showError(message) {
+    // The error line is kept as a function that draws it from the wording, so a language switch redraws it as well.
+    var shownError = null;
+
+    function drawError() {
       var box = el('error');
-      box.textContent = message;
+      if (!shownError) {
+        box.classList.add('hidden');
+        return;
+      }
+      box.textContent = shownError();
       box.classList.remove('hidden');
     }
 
+    function showError(drawLine) {
+      shownError = drawLine;
+      drawError();
+    }
+
     function hideError() {
+      shownError = null;
       el('error').classList.add('hidden');
     }
 
-    function setBusy(busy, label) {
+    // The submit button is disabled and labelled while a request is in flight.
+    var busy = false;
+
+    function drawSubmit() {
       var button = el('submit');
+      var t = wording();
       button.disabled = busy;
-      button.textContent = label;
+      button.textContent = busy ? t.signingIn : t.signIn;
     }
 
-    function fail(message) {
-      showError(message);
-      setBusy(false, text.signIn);
+    function setBusy(on) {
+      busy = on;
+      drawSubmit();
+    }
+
+    // The text of one key of the wording, read at the moment the line is drawn.
+    function line(key) {
+      return function () { return wording()[key]; };
+    }
+
+    function fail(drawLine) {
+      showError(drawLine);
+      setBusy(false);
     }
 
     function fetchFailure(status) {
-      return status === 401 || status === 400 ? text.invalid : text.failed + ' (' + status + ').';
+      var t = wording();
+      return status === 401 || status === 400 ? t.invalid : t.failed + ' (' + status + ').';
+    }
+
+    // The show-password button: aria-pressed says whether the password is shown, aria-label and title name what a click does, and
+    // the icon (the button's first element child, when it has one) matches. The page supplies the button, and should start it with
+    // aria-pressed="false".
+    function drawReveal() {
+      var button = el('reveal');
+      var shown = el('password').type === 'text';
+      var t = wording();
+      var label = shown ? t.hidePassword : t.showPassword;
+      button.setAttribute('aria-pressed', shown ? 'true' : 'false');
+      button.setAttribute('aria-label', label);
+      button.title = label;
+      var icon = button.firstElementChild;
+      if (icon) {
+        icon.className = 'icon ' + (shown ? 'icon-eye-off' : 'icon-eye');
+        icon.style.width = '18px';
+        icon.style.height = '18px';
+      }
+    }
+
+    // A language switch draws the page's own text again: the submit button, the show-password button and the error line.
+    function redraw() {
+      drawSubmit();
+      drawReveal();
+      drawError();
     }
 
     // Stores the tokens and leaves for the page the operator came from.
@@ -171,7 +241,7 @@
 
     async function signInWithPassword() {
       hideError();
-      setBusy(true, text.signingIn);
+      setBusy(true);
       var body = {};
       body[identifierField] = el('identifier').value;
       body.password = el('password').value;
@@ -181,30 +251,34 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body)
         });
-        if (!res.ok) { fail(fetchFailure(res.status)); return; }
+        if (!res.ok) {
+          var status = res.status;
+          fail(function () { return fetchFailure(status); });
+          return;
+        }
         var data = await res.json();
-        if (!data || !data.accessToken) { fail(text.failed + '.'); return; }
+        if (!data || !data.accessToken) { fail(function () { return wording().failed + '.'; }); return; }
         completeSignIn(data);
       } catch (ex) {
-        fail(text.network);
+        fail(line('network'));
       }
     }
 
     async function exchangeMicrosoftCode(code) {
       hideError();
-      setBusy(true, text.signingIn);
+      setBusy(true);
       try {
         var res = await doFetch(microsoftExchangePath, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ code: code })
         });
-        if (!res.ok) { fail(text.expired); return; }
+        if (!res.ok) { fail(line('expired')); return; }
         var data = await res.json();
-        if (!data || !data.accessToken) { fail(text.expired); return; }
+        if (!data || !data.accessToken) { fail(line('expired')); return; }
         completeSignIn(data);
       } catch (ex) {
-        fail(text.network);
+        fail(line('network'));
       }
     }
 
@@ -220,13 +294,8 @@
 
       el('reveal').addEventListener('click', function () {
         var pw = el('password');
-        var show = pw.type === 'password';
-        pw.type = show ? 'text' : 'password';
-        var button = el('reveal');
-        button.title = show ? text.hidePassword : text.showPassword;
-        button.firstElementChild.className = 'icon ' + (show ? 'icon-eye-off' : 'icon-eye');
-        button.firstElementChild.style.width = '18px';
-        button.firstElementChild.style.height = '18px';
+        pw.type = pw.type === 'password' ? 'text' : 'password';
+        drawReveal();
       });
 
       el('form').addEventListener('submit', function (event) {
@@ -241,10 +310,15 @@
         loc().href = microsoftStartPath + (hint ? '?login_hint=' + encodeURIComponent(hint) : '');
       });
 
+      var target = opt.eventTarget || root;
+      if (languageEvent && target && typeof target.addEventListener === 'function') {
+        target.addEventListener(languageEvent, redraw);
+      }
+
       if (code) {
         exchangeMicrosoftCode(code);
       } else if (error) {
-        showError(microsoftErrorText(error, providerCode, messages, text));
+        showError(function () { return microsoftErrorText(error, providerCode, refusalTexts(), wording()); });
       }
     }
 

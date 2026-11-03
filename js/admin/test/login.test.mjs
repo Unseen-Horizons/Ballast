@@ -84,12 +84,12 @@ describe('microsoftErrorText', () => {
   });
 });
 
-function loginDom() {
+function loginDom({ icon = true } = {}) {
   const ids = {
     loginForm: fakeElement('loginForm'),
     email: fakeElement('email', { value: 'ana@example.test' }),
     password: fakeElement('password', { value: 'secret', type: 'password' }),
-    reveal: fakeElement('reveal', { firstElementChild: fakeElement('icon') }),
+    reveal: fakeElement('reveal', { firstElementChild: icon ? fakeElement('icon') : null }),
     submit: fakeElement('submit', { value: '' }),
     error: fakeElement('error', { classes: ['hidden'] }),
     microsoft: fakeElement('microsoft')
@@ -98,8 +98,8 @@ function loginDom() {
   return { ids, document };
 }
 
-function signInPage({ href = `${ORIGIN}/admin/login.html`, search = '', fetchImpl, storage } = {}) {
-  const dom = loginDom();
+function signInPage({ href = `${ORIGIN}/admin/login.html`, search = '', fetchImpl, storage, icon, text, messages, languageEvent, eventTarget } = {}) {
+  const dom = loginDom({ icon });
   const location = fakeLocation(`${href}${search}`);
   const history = { replaced: [], replaceState(_s, _t, url) { this.replaced.push(url); } };
   const state = storage || fakeStorage();
@@ -109,7 +109,7 @@ function signInPage({ href = `${ORIGIN}/admin/login.html`, search = '', fetchImp
     return fetchImpl ? fetchImpl(input, init) : json({ accessToken: 'a1', refreshToken: 'r1' });
   };
   const auth = createAuth({ storage: state, location, fetch });
-  const page = createLoginPage({ auth, document: dom.document, location, history, fetch });
+  const page = createLoginPage({ auth, document: dom.document, location, history, fetch, text, messages, languageEvent, eventTarget });
   return { ...dom, page, location, history, storage: state, calls, auth };
 }
 
@@ -239,5 +239,128 @@ describe('createLoginPage: Microsoft', () => {
     p.ids.reveal.dispatch('click');
     assert.equal(p.ids.password.type, 'password');
     assert.equal(p.ids.reveal.title, 'Show password');
+  });
+});
+
+// A window-like target that records the listeners, and fires an event for a test.
+function fakeEventTarget() {
+  const listeners = {};
+  return {
+    listeners,
+    addEventListener(type, fn) { (listeners[type] ||= []).push(fn); },
+    fire(type, detail) { (listeners[type] || []).forEach((fn) => fn({ type, detail })); }
+  };
+}
+
+describe('createLoginPage: the show-password button', () => {
+  it('toggles aria-pressed and the label on a button with no icon child, and sets nothing on an icon that is not there', () => {
+    const p = signInPage({ icon: false });
+    p.page.start();
+
+    p.ids.reveal.dispatch('click');
+    assert.equal(p.ids.password.type, 'text');
+    assert.equal(p.ids.reveal.getAttribute('aria-pressed'), 'true');
+    assert.equal(p.ids.reveal.getAttribute('aria-label'), 'Hide password');
+    assert.equal(p.ids.reveal.title, 'Hide password');
+
+    p.ids.reveal.dispatch('click');
+    assert.equal(p.ids.password.type, 'password');
+    assert.equal(p.ids.reveal.getAttribute('aria-pressed'), 'false');
+    assert.equal(p.ids.reveal.getAttribute('aria-label'), 'Show password');
+  });
+
+  it('also sets the icon class and size when the button has an icon child', () => {
+    const p = signInPage({ icon: true });
+    p.page.start();
+
+    p.ids.reveal.dispatch('click');
+    assert.equal(p.ids.reveal.firstElementChild.className, 'icon icon-eye-off');
+    assert.equal(p.ids.reveal.firstElementChild.style.width, '18px');
+
+    p.ids.reveal.dispatch('click');
+    assert.equal(p.ids.reveal.firstElementChild.className, 'icon icon-eye');
+  });
+});
+
+describe('createLoginPage: the wording and the language switch', () => {
+  const WORDS = {
+    en: { invalid: 'Invalid credentials.', signIn: 'Sign in', signingIn: 'Signing in…', showPassword: 'Show password', hidePassword: 'Hide password' },
+    hr: { invalid: 'Neispravni podaci.', signIn: 'Prijava', signingIn: 'Prijavljujem…', showPassword: 'Prikaži lozinku', hidePassword: 'Sakrij lozinku' }
+  };
+
+  it('takes the wording as a function, which is asked each time the page draws text', async () => {
+    let asked = 0;
+    const p = signInPage({ fetchImpl: () => json({}, 401), text: () => { asked += 1; return WORDS.en; } });
+    p.page.start();
+    const before = asked;
+
+    await submitForm(p);
+
+    assert.equal(p.ids.error.textContent, 'Invalid credentials.');
+    assert.equal(p.ids.submit.textContent, 'Sign in');
+    assert.ok(asked > before, 'the wording function is asked again when the page draws');
+  });
+
+  it('keeps the object form of the wording, with the defaults for anything it leaves out', () => {
+    const p = signInPage({ text: { signIn: 'Log in' } });
+    p.page.start();
+
+    p.ids.reveal.dispatch('click');
+    assert.equal(p.ids.reveal.title, 'Hide password');
+  });
+
+  it('takes the Microsoft refusal texts as an object, or as a function asked when the refusal is drawn', () => {
+    const asObject = signInPage({ search: '?error=MS_NO_ROLE', messages: { MS_NO_ROLE: 'Not yours.' } });
+    asObject.page.start();
+    assert.equal(asObject.ids.error.textContent, 'Not yours.');
+
+    let asked = 0;
+    const asFunction = signInPage({ search: '?error=MS_NO_ROLE', messages: () => { asked += 1; return { MS_NO_ROLE: 'Nemate ulogu.' }; } });
+    asFunction.page.start();
+    assert.equal(asFunction.ids.error.textContent, 'Nemate ulogu.');
+    assert.equal(asked, 1);
+  });
+
+  it('redraws the submit button, the show-password button and the error line when the language changes', async () => {
+    let lang = 'en';
+    const events = fakeEventTarget();
+    const p = signInPage({ fetchImpl: () => json({}, 401), text: () => WORDS[lang], eventTarget: events });
+    p.page.start();
+    await submitForm(p);
+    assert.equal(p.ids.error.textContent, 'Invalid credentials.');
+
+    lang = 'hr';
+    events.fire('languageChanged', { lang: 'hr' });
+
+    assert.equal(p.ids.error.textContent, 'Neispravni podaci.');
+    assert.equal(p.ids.error.classList.contains('hidden'), false);
+    assert.equal(p.ids.submit.textContent, 'Prijava');
+    assert.equal(p.ids.reveal.getAttribute('aria-label'), 'Prikaži lozinku');
+  });
+
+  it('keeps a hidden error hidden when the language changes', () => {
+    let lang = 'en';
+    const events = fakeEventTarget();
+    const p = signInPage({ text: () => WORDS[lang], eventTarget: events });
+    p.page.start();
+
+    lang = 'hr';
+    events.fire('languageChanged', { lang: 'hr' });
+
+    assert.equal(p.ids.error.classList.contains('hidden'), true);
+  });
+
+  it('listens for languageChanged by default, for the name languageEvent gives, and for nothing when it is null', () => {
+    const byDefault = fakeEventTarget();
+    signInPage({ eventTarget: byDefault }).page.start();
+    assert.deepEqual(Object.keys(byDefault.listeners), ['languageChanged']);
+
+    const named = fakeEventTarget();
+    signInPage({ eventTarget: named, languageEvent: 'uiLanguage' }).page.start();
+    assert.deepEqual(Object.keys(named.listeners), ['uiLanguage']);
+
+    const off = fakeEventTarget();
+    signInPage({ eventTarget: off, languageEvent: null }).page.start();
+    assert.deepEqual(Object.keys(off.listeners), []);
   });
 });

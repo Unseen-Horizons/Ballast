@@ -11,7 +11,7 @@
 //   2. the text the codeText hook gives for the code, or for the title when the answer has no code (for example, a
 //      translation of the code);
 //   3. the detail, else the title, the message, the error, else the fallback.
-// Field messages are appended, and so is the trace reference.
+// Field messages are appended, and so is the trace reference (the options fieldErrors and traceId turn either one off).
 //
 // In a browser this file is a classic <script>: it installs its functions on window.BallastWeb. Under CommonJS (Node tests)
 // it exports them instead.
@@ -54,16 +54,21 @@
    * The one line of text for a failed answer.
    * @param {number} status the HTTP status of the answer
    * @param {object|string|null} body what readProblemBody returned, or a parsed body
-   * @param {{fallback?: string, preferDetail?: boolean, codeText?: function(string, object): (string|null|undefined)}} [options]
+   * @param {{fallback?: string, preferDetail?: boolean, codeText?: function(string, object): (string|null|undefined), fieldErrors?: boolean, traceId?: boolean}} [options]
    *   fallback: the text when the body says nothing (default "Request failed (status)");
    *   preferDetail: show the detail first for a 4xx answer that has a code (default false);
    *   codeText: the hook that turns an error code into text, or null when it has none. It is asked with the code, or with
-   *   the title when the answer has no code.
+   *   the title when the answer has no code;
+   *   fieldErrors: append the field messages of an answer's errors (default true);
+   *   traceId: append the trace reference of an answer, as " (ref X)" (default true).
+   *   The defaults give the full text. An app that keeps its own banner text sets either to false.
    * @returns {string}
    */
   function problemMessage(status, body, options) {
     var opt = options || {};
     var fallback = opt.fallback || ('Request failed (' + status + ')');
+    var fieldErrors = opt.fieldErrors !== false;
+    var traceId = opt.traceId !== false;
     if (typeof body === 'string') return body || fallback;
     if (!body || typeof body !== 'object') return fallback;
 
@@ -84,7 +89,7 @@
     }
 
     var errors = body.errors;
-    if (errors && typeof errors === 'object') {
+    if (fieldErrors && errors && typeof errors === 'object') {
       var parts = Object.keys(errors).map(function (key) {
         var messages = Array.isArray(errors[key]) ? errors[key].join('; ') : String(errors[key]);
         return key + ': ' + messages;
@@ -93,7 +98,7 @@
     }
 
     var trace = asText(body.traceId);
-    if (trace) base += ' (ref ' + trace + ')';
+    if (traceId && trace) base += ' (ref ' + trace + ')';
     return base;
   }
 
