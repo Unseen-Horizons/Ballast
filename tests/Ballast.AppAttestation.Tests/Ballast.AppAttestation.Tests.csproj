@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.TestHost" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Ballast.AppAttestation\Ballast.AppAttestation.csproj" />
+    <ProjectReference Include="..\..\src\Ballast.AspNetCore\Ballast.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\src\Ballast.Errors\Ballast.Errors.csproj" />
+  </ItemGroup>
+
+</Project>
