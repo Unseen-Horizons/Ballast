@@ -79,6 +79,15 @@
   <ItemGroup Label="Build-time task of Ballast.Translations (private to that package, not a runtime dependency)">
     <PackageVersion Include="Microsoft.Build.Utilities.Core" Version="18.0.2" />
   </ItemGroup>
+  <ItemGroup Label="Ballast.Auth (sign-in, sessions, Identity, Google and Microsoft staff sign-in)">
+    <!-- Microsoft packages at the .NET 10 GA line. Identity and JwtBearer are NuGet packages, not part of the shared framework. -->
+    <PackageVersion Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.0" />
+    <!-- Google.Apis.Auth (Google ID tokens) and Microsoft.IdentityModel.JsonWebTokens are pinned once, in the app attestation group. -->
+    <!-- MIT. Verifies the BCrypt hashes that the legacy password option reads. -->
+    <PackageVersion Include="BCrypt.Net-Next" Version="4.2.0" />
+  </ItemGroup>
   <ItemGroup Label="Build-time, CI only">
     <!-- The 10.0.x line of the .NET SDK pinned in global.json. -->
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.401" />

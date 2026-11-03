@@ -19,6 +19,7 @@
     <Project Path="src/Ballast.Feedback/Ballast.Feedback.csproj" />
     <Project Path="src/Ballast.AppUpdates/Ballast.AppUpdates.csproj" />
     <Project Path="src/Ballast.Maui/Ballast.Maui.csproj" />
+    <Project Path="src/Ballast.Auth/Ballast.Auth.csproj" />
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="tests/Ballast.Errors.Tests/Ballast.Errors.Tests.csproj" />
@@ -40,5 +41,6 @@
     <Project Path="tests/Ballast.Feedback.Tests/Ballast.Feedback.Tests.csproj" />
     <Project Path="tests/Ballast.AppUpdates.Tests/Ballast.AppUpdates.Tests.csproj" />
     <Project Path="tests/Ballast.Maui.Tests/Ballast.Maui.Tests.csproj" />
+    <Project Path="tests/Ballast.Auth.Tests/Ballast.Auth.Tests.csproj" />
   </Folder>
 </Solution>

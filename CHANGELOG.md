@@ -4,7 +4,7 @@ Every library in Ballast carries the same version. Each shared version has one s
 
 ## 0.1.0-preview.1
 
-Not yet published. The first preview: fourteen libraries, all new.
+Not yet published. The first preview: the libraries listed below, all new.
 
 ### Added
 
@@ -28,3 +28,4 @@ Not yet published. The first preview: fourteen libraries, all new.
 - **Ballast.Feedback**: the feedback request with its length caps, a manager over an app's store that checks and saves a message and reads it back for triage, and a client that posts it and reports one of six outcomes.
 - **Ballast.AppUpdates**: the build check: the version answer read from the `AppVersion` configuration section and its manager, the client that asks it (404 means no minimum), the pure update rules, the store contract, and the install channel names.
 - **Ballast.Maui**: phone app plumbing for .NET MAUI, unreleased: owner-sealed on-device storage with one shared key, a one-time sweep of old temporary files, connectivity state, HTTP client setup that refuses a certificate override outside a debug build, the AdMob banner and native-card rules, the localisation runtime, crash reports scrubbed before they are offered, permission asks, the store review prompt policy and view helpers.
+- **Ballast.Auth**: sign-in for a web app: rotating refresh tokens with reuse detection, short access tokens with an instant cut-off, lockout and the enumeration guard, ASP.NET Core Identity over Entity Framework (string or int keys), single-use e-mail sign-in links, Google sign-in, Microsoft staff sign-in, and a signed access token for an account outside Identity.
