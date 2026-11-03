@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The tests run on net10.0 only. The library's logic is all net10.0; its MAUI and Android code is checked by building the library for
+    its platform targets, not by running tests.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Ballast.Maui\Ballast.Maui.csproj" />
+  </ItemGroup>
+
+</Project>

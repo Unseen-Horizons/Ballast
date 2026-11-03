@@ -14,6 +14,7 @@
     <Project Path="src/Ballast.Http/Ballast.Http.csproj" />
     <Project Path="src/Ballast.SqlServer/Ballast.SqlServer.csproj" />
     <Project Path="src/Ballast.Jobs/Ballast.Jobs.csproj" />
+    <Project Path="src/Ballast.Maui/Ballast.Maui.csproj" />
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="tests/Ballast.Errors.Tests/Ballast.Errors.Tests.csproj" />
@@ -30,5 +31,6 @@
     <Project Path="tests/Ballast.Http.Tests/Ballast.Http.Tests.csproj" />
     <Project Path="tests/Ballast.SqlServer.Tests/Ballast.SqlServer.Tests.csproj" />
     <Project Path="tests/Ballast.Jobs.Tests/Ballast.Jobs.Tests.csproj" />
+    <Project Path="tests/Ballast.Maui.Tests/Ballast.Maui.Tests.csproj" />
   </Folder>
 </Solution>

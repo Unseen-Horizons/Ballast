@@ -17,3 +17,4 @@ has a short example that runs as written.
 - [Ballast.Http](Http.md): public-address guard, redirect rules, capped bodies, host credentials, safe log URLs, Retry-After and the polite fetcher.
 - [Ballast.SqlServer](SqlServer.md): SQL error classes, the enum and delete conventions, transactions, claims, sequences, batches, collation and connection checks.
 - [Ballast.Jobs](Jobs.md): the job lock, leader-only hosted services, the 409 for admin actions and the job-lock readiness check.
+- [Ballast.Maui](Maui.md): sealed on-device storage, connectivity state, HTTP client setup, the AdMob banner and native cards, the localisation runtime, crash reports, permission asks, the store review prompt and view helpers.
