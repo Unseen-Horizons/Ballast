@@ -18,3 +18,5 @@ has a short example that runs as written.
 - [Ballast.SqlServer](SqlServer.md): SQL error classes, the enum and delete conventions, transactions, claims, sequences, batches, collation and connection checks.
 - [Ballast.Jobs](Jobs.md): the job lock, leader-only hosted services, the 409 for admin actions and the job-lock readiness check.
 - [Ballast.AppAttestation](AppAttestation.md): Play Integrity app sessions, the gate, the web ticket and its cookie, and the store seams. Setup: [Play Integrity](setup/play-integrity.md).
+- [Ballast.Feedback](Feedback.md): the feedback request with its caps, the manager over a store, and the client that sends it.
+- [Ballast.AppUpdates](AppUpdates.md): the build check: the version answer and its client, the update rules, and the store and install-channel contracts.
