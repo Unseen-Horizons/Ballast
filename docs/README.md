@@ -20,3 +20,4 @@ has a short example that runs as written.
 - [Ballast.AppAttestation](AppAttestation.md): Play Integrity app sessions, the gate, the web ticket and its cookie, and the store seams. Setup: [Play Integrity](setup/play-integrity.md).
 - [Ballast.Feedback](Feedback.md): the feedback request with its caps, the manager over a store, and the client that sends it.
 - [Ballast.AppUpdates](AppUpdates.md): the build check: the version answer and its client, the update rules, and the store and install-channel contracts.
+- [Ballast.Maui](Maui.md): sealed on-device storage, connectivity state, HTTP client setup, the AdMob banner and native cards, the localisation runtime, crash reports, permission asks, the store review prompt and view helpers.

@@ -28,6 +28,23 @@
     <PackageVersion Include="Microsoft.Extensions.Http.Resilience" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.0" />
   </ItemGroup>
+  <ItemGroup Label="MAUI library (Ballast.Maui: the android and windows targets)">
+    <!-- The same versions GetThere pins, so the app and the library resolve one MAUI and one AdMob binding. -->
+    <PackageVersion Include="Microsoft.Maui.Controls" Version="10.0.110" />
+    <PackageVersion Include="Plugin.AdMob" Version="10.0.90" />
+    <!-- The Kotlin extension (Ktx) bindings on the AndroidX releases MAUI resolves, as GetThere pins them. A Ktx binding left on an older release
+         than its base package makes NuGet report NU1608 on the android target. Bump them together with MAUI. -->
+    <PackageVersion Include="Xamarin.AndroidX.Activity.Ktx" Version="1.13.0.1" />
+    <PackageVersion Include="Xamarin.AndroidX.Collection.Ktx" Version="1.6.0.1" />
+    <PackageVersion Include="Xamarin.AndroidX.Fragment.Ktx" Version="1.9.0" />
+    <PackageVersion Include="Xamarin.AndroidX.Lifecycle.Common.Java8" Version="2.11.0.1" />
+    <PackageVersion Include="Xamarin.AndroidX.Lifecycle.Process" Version="2.11.0.1" />
+    <PackageVersion Include="Xamarin.AndroidX.Lifecycle.Runtime.Ktx" Version="2.11.0.1" />
+    <PackageVersion Include="Xamarin.AndroidX.Lifecycle.Runtime.Ktx.Android" Version="2.11.0.1" />
+    <PackageVersion Include="Xamarin.AndroidX.Lifecycle.ViewModel.Ktx" Version="2.11.0.1" />
+    <PackageVersion Include="Xamarin.AndroidX.SavedState.SavedState.Ktx" Version="1.5.0.1" />
+    <PackageVersion Include="Xamarin.AndroidX.Tracing.Tracing.Ktx" Version="2.0.0" />
+  </ItemGroup>
   <ItemGroup Label="Test projects (Microsoft.Testing.Platform, see global.json)">
     <PackageVersion Include="coverlet.collector" Version="10.1.0" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
