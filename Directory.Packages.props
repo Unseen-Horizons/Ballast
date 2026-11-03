@@ -40,6 +40,18 @@
     <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
   </ItemGroup>
+  <ItemGroup Label="Ballast.Auth (sign-in, sessions, Identity, Google and Microsoft staff sign-in)">
+    <!-- Microsoft packages at the .NET 10 GA line. Identity and JwtBearer are NuGet packages, not part of the shared framework. -->
+    <PackageVersion Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.0" />
+    <PackageVersion Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" Version="10.0.0" />
+    <!-- Microsoft.IdentityModel is versioned 8.x, not 10.x. 8.23.0 is the release the apps already use. -->
+    <PackageVersion Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.23.0" />
+    <!-- Apache-2.0. Verifies Google ID tokens. 1.78.0 is the release the apps already use. -->
+    <PackageVersion Include="Google.Apis.Auth" Version="1.78.0" />
+    <!-- MIT. Verifies the BCrypt hashes that the legacy password option reads. -->
+    <PackageVersion Include="BCrypt.Net-Next" Version="4.2.0" />
+  </ItemGroup>
   <ItemGroup Label="Build-time, CI only">
     <!-- The 10.0.x line of the .NET SDK pinned in global.json. -->
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.401" />

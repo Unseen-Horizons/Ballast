@@ -17,3 +17,4 @@ has a short example that runs as written.
 - [Ballast.Http](Http.md): public-address guard, redirect rules, capped bodies, host credentials, safe log URLs, Retry-After and the polite fetcher.
 - [Ballast.SqlServer](SqlServer.md): SQL error classes, the enum and delete conventions, transactions, claims, sequences, batches, collation and connection checks.
 - [Ballast.Jobs](Jobs.md): the job lock, leader-only hosted services, the 409 for admin actions and the job-lock readiness check.
+- [Ballast.Auth](Auth.md): sign-in for a web app: rotating refresh tokens, short access tokens with an instant cut-off, lockout, single-use e-mail sign-in links, Google and Microsoft staff sign-in, and access tokens for accounts outside Identity. Setup: [Microsoft](setup/microsoft-sign-in.md), [Google](setup/google-sign-in.md).
