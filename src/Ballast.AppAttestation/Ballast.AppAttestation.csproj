@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Title>Ballast.AppAttestation</Title>
+    <Description>Play Integrity app sessions for an API. The install proves itself once with a nonce-first Play Integrity verdict, is given a signed session token, and a gate refuses data calls without one. A one-use web ticket carries the session into a WebView as an HttpOnly cookie. Includes the Google decoder and developer-certificate sideloads.</Description>
+  </PropertyGroup>
+
+  <!--
+    The gate is ASP.NET Core middleware and an authentication handler, the decoder uses the Google Play Integrity client, and
+    the token handler is Microsoft.IdentityModel. None of these is trim-safe or AOT-compatible, so the library is not marked as
+    either: marking it would promise a trimmed or AOT app a thing the framework and Google code cannot keep. The shared settings
+    in src/Directory.Build.props switch both on, and this file switches them off.
+  -->
+  <PropertyGroup>
+    <IsTrimmable>false</IsTrimmable>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <!-- The tests reach the two rules that are internal on purpose: parking a session on a request, and the nonce byte comparison. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Ballast.AppAttestation.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Apis.Auth" />
+    <PackageReference Include="Google.Apis.PlayIntegrity.v1" />
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Ballast.Errors\Ballast.Errors.csproj" />
+    <ProjectReference Include="..\Ballast.AspNetCore\Ballast.AspNetCore.csproj" />
+  </ItemGroup>
+
+</Project>

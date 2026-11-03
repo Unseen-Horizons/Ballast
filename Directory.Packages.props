@@ -40,6 +40,13 @@
     <PackageVersion Include="Microsoft.Extensions.Configuration" Version="10.0.0" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
   </ItemGroup>
+  <ItemGroup Label="App attestation (server): Play Integrity verdicts and the session token">
+    <!-- Google's client libraries, Apache-2.0. The Play Integrity client is the one GetThere has used since 2026-10-05. -->
+    <PackageVersion Include="Google.Apis.Auth" Version="1.78.0" />
+    <PackageVersion Include="Google.Apis.PlayIntegrity.v1" Version="1.76.0.4270" />
+    <!-- Microsoft.IdentityModel has its own version line (not 10.0.x). The session token is signed and validated with it. -->
+    <PackageVersion Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.23.0" />
+  </ItemGroup>
   <ItemGroup Label="Build-time, CI only">
     <!-- The 10.0.x line of the .NET SDK pinned in global.json. -->
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.401" />
