@@ -17,3 +17,5 @@ has a short example that runs as written.
 - [Ballast.Http](Http.md): public-address guard, redirect rules, capped bodies, host credentials, safe log URLs, Retry-After and the polite fetcher.
 - [Ballast.SqlServer](SqlServer.md): SQL error classes, the enum and delete conventions, transactions, claims, sequences, batches, collation and connection checks.
 - [Ballast.Jobs](Jobs.md): the job lock, leader-only hosted services, the 409 for admin actions and the job-lock readiness check.
+- [Ballast.Admin](Admin.md): the staff console kit, server and browser: its content security policy and headers, the "who am I" answer, the sign-in state, the page shell, the sign-in page and the staff-and-roles page.
+- [@ballast/web](Web.md): the browser helpers for pages (escaping, the instant of a server string, problem answers, the translation loader, place and event times) and the vendor-copy script.

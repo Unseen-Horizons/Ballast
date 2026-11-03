@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Title>Ballast.Admin</Title>
+    <Description>The server half of a staff console: the content security policy and headers of its static pages, and the answer to "who am I" with the signed-in person's roles and permissions for permission-aware navigation.</Description>
+  </PropertyGroup>
+
+  <!--
+    The console's headers are written with Ballast.AspNetCore's static file rules, which are ASP.NET Core types. ASP.NET Core is not
+    trim-safe or AOT-safe, so the library is not marked trimmable or AOT-compatible. The shared settings in src/Directory.Build.props
+    switch both on, and this file switches them off.
+  -->
+  <PropertyGroup>
+    <IsTrimmable>false</IsTrimmable>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Ballast.AspNetCore\Ballast.AspNetCore.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -10,6 +10,7 @@
     <Project Path="src/Ballast.Email/Ballast.Email.csproj" />
     <Project Path="src/Ballast.Storage/Ballast.Storage.csproj" />
     <Project Path="src/Ballast.AspNetCore/Ballast.AspNetCore.csproj" />
+    <Project Path="src/Ballast.Admin/Ballast.Admin.csproj" />
     <Project Path="src/Ballast.Health/Ballast.Health.csproj" />
     <Project Path="src/Ballast.Http/Ballast.Http.csproj" />
     <Project Path="src/Ballast.SqlServer/Ballast.SqlServer.csproj" />
@@ -26,6 +27,7 @@
     <Project Path="tests/Ballast.Email.Tests/Ballast.Email.Tests.csproj" />
     <Project Path="tests/Ballast.Storage.Tests/Ballast.Storage.Tests.csproj" />
     <Project Path="tests/Ballast.AspNetCore.Tests/Ballast.AspNetCore.Tests.csproj" />
+    <Project Path="tests/Ballast.Admin.Tests/Ballast.Admin.Tests.csproj" />
     <Project Path="tests/Ballast.Health.Tests/Ballast.Health.Tests.csproj" />
     <Project Path="tests/Ballast.Http.Tests/Ballast.Http.Tests.csproj" />
     <Project Path="tests/Ballast.SqlServer.Tests/Ballast.SqlServer.Tests.csproj" />
