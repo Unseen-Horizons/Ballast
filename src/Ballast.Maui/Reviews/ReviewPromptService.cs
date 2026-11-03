@@ -4,6 +4,7 @@
 
 using System.Diagnostics;
 
+using Ballast.AppUpdates;
 using Ballast.Maui.Dialogs;
 using Ballast.Maui.Platform;
 using Ballast.Maui.Storage;

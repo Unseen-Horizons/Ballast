@@ -39,7 +39,20 @@
     <PackageReference Include="Plugin.AdMob" />
   </ItemGroup>
 
+  <!-- The Android bindings: Play In-App Updates, the Play review prompt, Play Integrity and the Credential Manager sign-in (Google). -->
+  <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+    <PackageReference Include="Xamarin.Google.Android.Play.App.Update" />
+    <PackageReference Include="Xamarin.Google.Android.Play.Review" />
+    <PackageReference Include="Xamarin.Google.Android.Play.Integrity" />
+    <PackageReference Include="Xamarin.AndroidX.Credentials" />
+    <PackageReference Include="Xamarin.AndroidX.Credentials.PlayServicesAuth" />
+    <PackageReference Include="Xamarin.GoogleAndroid.Libraries.Identity.GoogleId" />
+  </ItemGroup>
+
   <ItemGroup>
+    <ProjectReference Include="..\Ballast.Errors\Ballast.Errors.csproj" />
+    <ProjectReference Include="..\Ballast.Feedback\Ballast.Feedback.csproj" />
+    <ProjectReference Include="..\Ballast.AppUpdates\Ballast.AppUpdates.csproj" />
     <ProjectReference Include="..\Ballast.Storage\Ballast.Storage.csproj" />
     <ProjectReference Include="..\Ballast.Text\Ballast.Text.csproj" />
   </ItemGroup>
@@ -59,6 +72,14 @@
   -->
   <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) != 'android'">
     <Compile Remove="Android\**" />
+  </ItemGroup>
+
+  <!--
+    The package's build folder ships with it: build/Ballast.Maui.targets (NuGet imports it into the app) and the consumer
+    ProGuard rule it names. Nothing else in the folder.
+  -->
+  <ItemGroup>
+    <None Include="build\**" Pack="true" PackagePath="build" />
   </ItemGroup>
 
 </Project>

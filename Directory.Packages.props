@@ -45,6 +45,18 @@
     <PackageVersion Include="Xamarin.AndroidX.SavedState.SavedState.Ktx" Version="1.5.0.1" />
     <PackageVersion Include="Xamarin.AndroidX.Tracing.Tracing.Ktx" Version="2.0.0" />
   </ItemGroup>
+  <ItemGroup Label="Android bindings (Ballast.Maui, the android target)">
+    <!-- Play In-App Updates: the flexible update (Android/PlayAppUpdater). -->
+    <PackageVersion Include="Xamarin.Google.Android.Play.App.Update" Version="2.1.0.20" />
+    <!-- Play In-App Review: the one-time rating prompt (Android/PlayReviewPrompt). -->
+    <PackageVersion Include="Xamarin.Google.Android.Play.Review" Version="2.0.2.10" />
+    <!-- Play Integrity: the app's half of the app session (Android/PlayIntegrityProvider). -->
+    <PackageVersion Include="Xamarin.Google.Android.Play.Integrity" Version="1.6.0.4" />
+    <!-- Google sign-in (Android Credential Manager and Google ID), the versions GetThere pins. -->
+    <PackageVersion Include="Xamarin.AndroidX.Credentials" Version="1.6.0.1" />
+    <PackageVersion Include="Xamarin.AndroidX.Credentials.PlayServicesAuth" Version="1.6.0.2" />
+    <PackageVersion Include="Xamarin.GoogleAndroid.Libraries.Identity.GoogleId" Version="1.1.0.13" />
+  </ItemGroup>
   <ItemGroup Label="Test projects (Microsoft.Testing.Platform, see global.json)">
     <PackageVersion Include="coverlet.collector" Version="10.1.0" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
