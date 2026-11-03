@@ -24,3 +24,10 @@ has a short example that runs as written.
 - [Ballast.Admin](Admin.md): the staff console kit, server and browser: its content security policy and headers, the "who am I" answer, the sign-in state, the page shell, the sign-in page and the staff-and-roles page.
 - [@ballast/web](Web.md): the browser helpers for pages (escaping, the instant of a server string, problem answers, the translation loader, place and event times) and the vendor-copy script.
 - [Ballast.Auth](Auth.md): sign-in for a web app: rotating refresh tokens, short access tokens with an instant cut-off, lockout, single-use e-mail sign-in links, Google and Microsoft staff sign-in, and access tokens for accounts outside Identity. Setup: [Microsoft](setup/microsoft-sign-in.md), [Google](setup/google-sign-in.md).
+- [Ballast.Testing](Testing.md): SQL Server test databases shared by several runs, captured logs, scripted HTTP fakes, test hosts and the source guard kit.
+- [Ballast.Build](Build.md): the shared analyzer and nullable settings, the analyzer severities, the NuGet audit and the build-time stamp.
+
+Tooling, not libraries:
+
+- [Deploy](Deploy.md): the PowerShell 7 deploy module, with its configuration, exit codes, migration guard and forbidden settings.
+- [CI](CI.md): the reusable .NET workflow, its two wait actions, the SQL Server service in Ballast's CI and the Semgrep rules.

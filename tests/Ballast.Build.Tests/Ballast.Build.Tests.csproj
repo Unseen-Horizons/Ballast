@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The tests build a small sample project with the Ballast.Build props and targets, in a temporary folder, and read the result.
+    They use no package and no project reference, so the only thing under test is the package's own build files.
+  -->
+  <PropertyGroup>
+    <!-- The sample projects are built by the tests, not by this project, so the test project needs no reference to Ballast.Build. -->
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+</Project>

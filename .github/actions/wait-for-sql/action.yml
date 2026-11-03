@@ -1,0 +1,46 @@
+name: Wait for SQL Server
+description: >-
+  Waits until a SQL Server service container answers a query as sa, then returns. Fails after timeout-seconds. Run it after
+  checkout and before any test that needs the server. It finds the container by its image, so the job must run that image as a
+  service.
+
+inputs:
+  password:
+    description: The sa password the container was started with.
+    required: true
+  image:
+    description: The image the service container runs. The container is found by this image name.
+    required: false
+    default: mcr.microsoft.com/mssql/server:2022-latest
+  timeout-seconds:
+    description: How long to wait for an answer before failing.
+    required: false
+    default: '120'
+
+runs:
+  using: composite
+  steps:
+    - name: Wait for SQL Server to answer a query
+      shell: bash
+      env:
+        SA_PASSWORD: ${{ inputs.password }}
+        SQL_IMAGE: ${{ inputs.image }}
+        WAIT_SECONDS: ${{ inputs.timeout-seconds }}
+      run: |
+        set -uo pipefail
+        deadline=$(( $(date +%s) + WAIT_SECONDS ))
+        container=""
+        while [ "$(date +%s)" -lt "$deadline" ]; do
+          if [ -z "$container" ]; then
+            container="$(docker ps -q --filter "ancestor=$SQL_IMAGE" | head -n 1)"
+          fi
+          # The port opens before the server is ready, so the test is a real query, not a connection.
+          if [ -n "$container" ] && docker exec "$container" /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -C -Q "SELECT 1" > /dev/null 2>&1; then
+            echo "SQL Server answers."
+            exit 0
+          fi
+          sleep 2
+        done
+        echo "::error::SQL Server did not answer within $WAIT_SECONDS seconds (container: ${container:-not found})."
+        docker ps -a || true
+        exit 1

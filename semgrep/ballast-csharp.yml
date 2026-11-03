@@ -1,0 +1,88 @@
+# Ballast's generic Semgrep rules for C#. Each app keeps its own overrides file next to its own rules; these carry no app paths.
+# Every hit is a candidate for a reader to confirm or reject, never a finding by itself. Run with --metrics=off.
+# Test targets: semgrep/tests/ballast-csharp.cs, where each line marked "ruleid" must be flagged and each line marked "ok" must not.
+rules:
+  - id: ballast-csharp-raw-sql-interpolated
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      A raw SQL call (ExecuteSqlRaw, FromSqlRaw, SqlQueryRaw) is given an interpolated string. The interpolated values are
+      pasted into the SQL text, not sent as parameters. Use ExecuteSqlInterpolated or FromSqlInterpolated, or pass the values
+      as parameters.
+    pattern-regex: '\b(?:ExecuteSqlRaw|ExecuteSqlRawAsync|FromSqlRaw|SqlQueryRaw)\s*(?:<[^>\r\n]+>)?\s*\(\s*\$@?"'
+    paths:
+      exclude:
+        - "**/bin/**"
+        - "**/obj/**"
+        - "**/Migrations/**"
+
+  - id: ballast-csharp-raw-sql-concatenated
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      A raw SQL call is given a string built with +. The concatenated value becomes part of the SQL text. Use parameters.
+    pattern-regex: '\b(?:ExecuteSqlRaw|ExecuteSqlRawAsync|FromSqlRaw|SqlQueryRaw)\s*(?:<[^>\r\n]+>)?\s*\(\s*(?:@?"[^"\r\n]*"\s*\+|[A-Za-z_][\w.]*\s*\+\s*@?")'
+    paths:
+      exclude:
+        - "**/bin/**"
+        - "**/obj/**"
+        - "**/Migrations/**"
+
+  - id: ballast-csharp-new-httpclient
+    languages: [csharp]
+    severity: WARNING
+    message: >-
+      An HttpClient is created directly. A client from IHttpClientFactory, or Ballast.Http's guarded client, carries the
+      timeouts and the redirect rules that a bare client does not.
+    pattern-regex: '\bnew\s+HttpClient\s*\('
+    paths:
+      exclude:
+        - "**/bin/**"
+        - "**/obj/**"
+
+  - id: ballast-csharp-jwt-validation-off
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      A token validation parameter is switched off. Issuer, audience, lifetime and signing-key checks are what stop a forged
+      or expired token from being accepted.
+    pattern-regex: '\bValidate(?:Issuer|Audience|Lifetime|IssuerSigningKey)\s*=\s*false\b'
+    paths:
+      exclude:
+        - "**/bin/**"
+        - "**/obj/**"
+
+  - id: ballast-csharp-secret-in-log
+    languages: [csharp]
+    severity: WARNING
+    message: >-
+      A logging call names a secret-looking value (a password, secret, token, API key or connection string). Log an identifier
+      that is not the secret itself.
+    pattern-regex: '(?i)\bLog(?:Trace|Debug|Information|Warning|Error|Critical)\s*\([^;]*\b(?:password|passwd|secret|token|apikey|connectionstring)\b'
+    paths:
+      exclude:
+        - "**/bin/**"
+        - "**/obj/**"
+
+  - id: ballast-csharp-process-start-nonconstant
+    languages: [csharp]
+    severity: WARNING
+    message: >-
+      A process is started with a program name or argument that is not a literal. Check that no part of it comes from a
+      request, a file or a setting an outsider can change. Pass arguments as a list, never as one string.
+    pattern-regex: '\bProcess\.Start\s*\(\s*(?!\s)(?!")(?!@")'
+    paths:
+      exclude:
+        - "**/bin/**"
+        - "**/obj/**"
+
+  - id: ballast-csharp-tls-certificate-validation-off
+    languages: [csharp]
+    severity: ERROR
+    message: >-
+      Server certificate validation is switched off. Any server then passes as the one the client meant to reach.
+    pattern-regex: '(?:ServerCertificateCustomValidationCallback\s*=\s*\([^)]*\)\s*=>\s*true\b|DangerousAcceptAnyServerCertificateValidator)'
+    paths:
+      exclude:
+        - "**/bin/**"
+        - "**/obj/**"

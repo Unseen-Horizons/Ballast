@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Title>Ballast.Testing</Title>
+    <Description>Test plumbing for xUnit v3 projects: per-run SQL Server test databases and their sweep, captured logs, scripted HTTP fakes, a loopback server, SQL exception builders, in-memory and API test hosts, and the source guard kit with its migration-safety engine.</Description>
+  </PropertyGroup>
+
+  <!--
+    Testing needs xUnit (Assert.Skip and the assembly fixture), ASP.NET Core test hosts, Entity Framework Core (the migration
+    guard reads migration operations) and SqlClient. Those are not trim-safe or AOT-compatible, and the library is for test
+    projects, which are never trimmed or published. Marking it would promise a thing its dependencies cannot keep.
+  -->
+  <PropertyGroup>
+    <IsTrimmable>false</IsTrimmable>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <!-- Clocks: FakeTimeProvider comes from here. This library does not ship a clock of its own. -->
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" />
+    <!-- The library-safe xUnit packages. xunit.v3 itself is for test projects only: referencing it from a library pulls in the test-project targets. -->
+    <PackageReference Include="xunit.v3.assert" />
+    <PackageReference Include="xunit.v3.extensibility.core" />
+  </ItemGroup>
+
+</Project>

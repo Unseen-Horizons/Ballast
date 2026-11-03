@@ -1,0 +1,72 @@
+# Ballast's generic Semgrep rules for JavaScript. Each app keeps its own overrides file next to its own rules; these carry no app paths.
+# Every hit is a candidate for a reader to confirm or reject, never a finding by itself. Run with --metrics=off.
+# Test targets: semgrep/tests/ballast-javascript.js, where each line marked "ruleid" must be flagged and each line marked "ok" must not.
+rules:
+  - id: ballast-javascript-innerhtml-non-literal
+    languages: [javascript]
+    severity: ERROR
+    message: >-
+      innerHTML or outerHTML is set to a value that is not a plain string literal. Text from data is then read as markup. Set
+      textContent, or build the nodes, or escape the text first.
+    pattern-regex: |-
+      \.(?:innerHTML|outerHTML)\s*\+?=\s*(?!\s)(?!['"\x60][^'"\x60$]*['"\x60]\s*;)
+    paths:
+      exclude:
+        - "**/node_modules/**"
+
+  - id: ballast-javascript-insert-adjacent-html
+    languages: [javascript]
+    severity: WARNING
+    message: >-
+      insertAdjacentHTML is given a value that is not a plain string literal. Text from data is then read as markup.
+    pattern-regex: |-
+      \.insertAdjacentHTML\s*\(\s*['"][^'"]*['"]\s*,\s*(?!\s)(?!['"\x60][^'"\x60$]*['"\x60]\s*\))
+    paths:
+      exclude:
+        - "**/node_modules/**"
+
+  - id: ballast-javascript-document-write
+    languages: [javascript]
+    severity: WARNING
+    message: >-
+      document.write or document.writeln is called. It rewrites the page as it loads and cannot be escaped safely. Create the
+      nodes instead.
+    pattern-regex: |-
+      \bdocument\.write(?:ln)?\s*\(
+    paths:
+      exclude:
+        - "**/node_modules/**"
+
+  - id: ballast-javascript-eval
+    languages: [javascript]
+    severity: ERROR
+    message: >-
+      eval or new Function runs a string as code. Use JSON.parse for data, and a function reference for behaviour.
+    pattern-regex: |-
+      \beval\s*\(|\bnew\s+Function\s*\(
+    paths:
+      exclude:
+        - "**/node_modules/**"
+
+  - id: ballast-javascript-postmessage-wildcard
+    languages: [javascript]
+    severity: WARNING
+    message: >-
+      postMessage is sent with the target origin '*', so any page that receives it can read the message. Give the origin.
+    pattern-regex: |-
+      \.postMessage\s*\([^;]*,\s*['"]\*['"]\s*\)
+    paths:
+      exclude:
+        - "**/node_modules/**"
+
+  - id: ballast-javascript-token-in-web-storage
+    languages: [javascript]
+    severity: WARNING
+    message: >-
+      A value whose name says token, password or secret is written to localStorage or sessionStorage. Any script on the page
+      can read it. Keep credentials in memory or in an httpOnly cookie.
+    pattern-regex: |-
+      (?i)\b(?:localStorage|sessionStorage)\.setItem\s*\(\s*['"][^'"]*(?:token|jwt|password|secret)[^'"]*['"]
+    paths:
+      exclude:
+        - "**/node_modules/**"

@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Title>Ballast.Build</Title>
+    <Description>Shared build settings for .NET projects, from one development-dependency package with no assembly: nullable and analyzer settings, analyzer severities, NuGet audit, and the build-time stamp that /health reports.</Description>
+    <!-- A development dependency is used by a project's build, never by the code that runs. The package has no assembly to load. -->
+    <DevelopmentDependency>true</DevelopmentDependency>
+    <IncludeBuildOutput>false</IncludeBuildOutput>
+    <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+    <!--
+      A package with no assembly has no target framework to list, so NuGet warns NU5128; that is expected here.
+      The symbols package would be empty too, since there is no assembly to hold symbols. NuGet refuses an empty package,
+      so symbols are off for this package only.
+    -->
+    <IncludeSymbols>false</IncludeSymbols>
+    <NoWarn>$(NoWarn);NU5128</NoWarn>
+  </PropertyGroup>
+
+  <!--
+    The package has no code, so trimming and AOT do not apply. They are off so the analyzers have nothing to check here.
+  -->
+  <PropertyGroup>
+    <IsTrimmable>false</IsTrimmable>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+
+  <!-- The build folder: the props and targets a project imports, and the analyzer severities. NuGet imports build/<PackageId>.props and .targets itself. -->
+  <ItemGroup>
+    <None Include="build\**" Pack="true" PackagePath="build\" />
+  </ItemGroup>
+
+</Project>
