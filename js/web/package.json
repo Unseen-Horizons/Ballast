@@ -1,6 +1,6 @@
 {
   "name": "@ballast/web",
-  "version": "0.1.0-preview.1",
+  "version": "0.1.0-preview.2",
   "description": "Browser helpers for server-rendered pages: HTML escaping, safe UTC instants, problem answers, an i18n loader and place-time formatting. Classic scripts with no build step.",
   "license": "MPL-2.0",
   "author": "Unseen Horizons",

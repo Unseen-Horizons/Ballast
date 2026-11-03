@@ -11,8 +11,8 @@
 // version and the SHA-256 of each file; the check reads the manifest and the tarball.
 //
 // Usage:
-//   node scripts/vendor-copy.mjs copy  --package artifacts/packages/ballast-web-0.1.0-preview.1.tgz --app <wwwroot> [--dest <dir>] [--map <file>=<target>]...
-//   node scripts/vendor-copy.mjs check --package artifacts/packages/ballast-web-0.1.0-preview.1.tgz --app <wwwroot> [--dest <dir>]
+//   node scripts/vendor-copy.mjs copy  --package artifacts/packages/ballast-web-0.1.0-preview.2.tgz --app <wwwroot> [--dest <dir>] [--map <file>=<target>]...
+//   node scripts/vendor-copy.mjs check --package artifacts/packages/ballast-web-0.1.0-preview.2.tgz --app <wwwroot> [--dest <dir>]
 //
 // --dest is relative to --app and defaults to vendor/ballast/<name>, where <name> is the package name without its scope
 // (@ballast/web gives vendor/ballast/web). --map sends one browser file to a different target, relative to --app, instead of

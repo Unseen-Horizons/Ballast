@@ -1,6 +1,6 @@
 {
   "name": "@ballast/admin",
-  "version": "0.1.0-preview.1",
+  "version": "0.1.0-preview.2",
   "description": "The staff console for a Ballast app: a shell with navigation and counts, sign-in with one shared refresh, the sign-in page with Microsoft, and the staff and roles page behind a data adapter. Classic scripts with no build step, served from the app's own origin.",
   "license": "MPL-2.0",
   "author": "Unseen Horizons",
@@ -10,7 +10,7 @@
     "README.md"
   ],
   "dependencies": {
-    "@ballast/web": "0.1.0-preview.1"
+    "@ballast/web": "0.1.0-preview.2"
   },
   "scripts": {
     "test": "node --test \"test/*.test.mjs\"",
