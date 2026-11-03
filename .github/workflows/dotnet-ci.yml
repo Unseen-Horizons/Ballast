@@ -1,0 +1,225 @@
+name: Dotnet CI
+
+# Reusable: a repository calls this file with `uses: <owner>/<repo>/.github/workflows/dotnet-ci.yml@<ref>` and passes the
+# inputs below. docs/CI.md is the guide. The SQL tests run in their own job, which exists only when `sql-server` is true,
+# because a service container belongs to one job.
+
+on:
+  workflow_call:
+    inputs:
+      solution:
+        description: The solution that restore, build, format, test and pack run on.
+        type: string
+        default: Ballast.slnx
+      dotnet-version:
+        description: The .NET SDK version that setup-dotnet installs.
+        type: string
+        default: 10.0.x
+      runner:
+        description: The GitHub-hosted runner image.
+        type: string
+        default: ubuntu-24.04
+      timeout-minutes:
+        description: The time limit of each job.
+        type: number
+        default: 20
+      workloads:
+        description: Workload ids that `dotnet workload install` adds before the build. Empty installs none.
+        type: string
+        default: ''
+      warnaserror:
+        description: Build with -warnaserror, so every warning fails the build.
+        type: boolean
+        default: true
+      format:
+        description: Run dotnet format with --verify-no-changes.
+        type: boolean
+        default: true
+      pack:
+        description: Pack the solution into pack-output and upload it as artifact-name.
+        type: boolean
+        default: true
+      pack-output:
+        description: The folder the packages are written to.
+        type: string
+        default: artifacts/packages
+      artifact-name:
+        description: The name of the uploaded package artifact.
+        type: string
+        default: packages
+      sql-server:
+        description: Run the sql-test-projects job against a SQL Server service container.
+        type: boolean
+        default: false
+      sql-image:
+        description: The SQL Server image for the service container.
+        type: string
+        default: mcr.microsoft.com/mssql/server:2022-latest
+      sql-env-name:
+        description: The environment variable the test projects read their SQL connection string from.
+        type: string
+        default: BALLAST_TEST_SQL
+      sql-test-projects:
+        description: Newline-separated test project paths that need SQL Server. Each one runs in turn against the service.
+        type: string
+        default: ''
+      js-directories:
+        description: Newline-separated directories that hold a package.json. Each runs npm ci and npm test --if-present.
+        type: string
+        default: ''
+
+# Read-only: nothing here writes to the repository.
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build, format, test and pack
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+
+      - name: Install workloads
+        if: inputs.workloads != ''
+        env:
+          WORKLOADS: ${{ inputs.workloads }}
+        run: dotnet workload install $WORKLOADS
+
+      - name: Cache NuGet packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/*.props') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      - name: Restore
+        env:
+          SOLUTION: ${{ inputs.solution }}
+        run: dotnet restore "$SOLUTION"
+
+      # Warnings are errors when warnaserror is on: a finding in any analyzer fails here, not in review.
+      - name: Build
+        env:
+          SOLUTION: ${{ inputs.solution }}
+          WARN_AS_ERROR: ${{ inputs.warnaserror && '-warnaserror' || '' }}
+        run: dotnet build "$SOLUTION" --no-restore $WARN_AS_ERROR
+
+      - name: Format
+        if: inputs.format
+        env:
+          SOLUTION: ${{ inputs.solution }}
+        run: dotnet format "$SOLUTION" --verify-no-changes --no-restore
+
+      # The SQL-backed tests skip here when no server is reachable; the sql-tests job runs them against a real one.
+      - name: Test
+        env:
+          SOLUTION: ${{ inputs.solution }}
+        run: dotnet test --solution "$SOLUTION" --no-restore
+
+      - name: Pack
+        if: inputs.pack
+        env:
+          SOLUTION: ${{ inputs.solution }}
+          PACK_OUTPUT: ${{ inputs.pack-output }}
+        run: dotnet pack "$SOLUTION" -c Release --no-restore -o "$PACK_OUTPUT"
+
+      - name: Upload packages
+        if: inputs.pack
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: ${{ inputs.pack-output }}
+          if-no-files-found: error
+
+  sql-tests:
+    name: SQL Server tests
+    if: inputs.sql-server && inputs.sql-test-projects != ''
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+
+    # A throwaway password for a container that exists only for this job, on the runner's own localhost.
+    services:
+      sqlserver:
+        image: ${{ inputs.sql-image }}
+        env:
+          ACCEPT_EULA: Y
+          MSSQL_SA_PASSWORD: "Ci_Ephemeral_Pw123!"
+        ports:
+          - 1433:1433
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: ${{ inputs.dotnet-version }}
+
+      - name: Wait for SQL Server
+        uses: ./.github/actions/wait-for-sql
+        with:
+          password: "Ci_Ephemeral_Pw123!"
+          image: ${{ inputs.sql-image }}
+
+      # The variable name is the caller's choice, so it is written to GITHUB_ENV from a step rather than set in env.
+      - name: Point the tests at the service
+        env:
+          SQL_ENV_NAME: ${{ inputs.sql-env-name }}
+        run: |
+          printf '%s=%s\n' "$SQL_ENV_NAME" "Server=localhost,1433;User Id=sa;Password=Ci_Ephemeral_Pw123!;TrustServerCertificate=True" >> "$GITHUB_ENV"
+
+      - name: Cache NuGet packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj', '**/*.props') }}
+          restore-keys: ${{ runner.os }}-nuget-
+
+      - name: Restore
+        env:
+          SOLUTION: ${{ inputs.solution }}
+        run: dotnet restore "$SOLUTION"
+
+      # One project at a time, so a failure names the project and the next one still runs after a pass.
+      - name: Test the SQL projects
+        env:
+          SQL_TEST_PROJECTS: ${{ inputs.sql-test-projects }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r project; do
+            [ -z "$project" ] && continue
+            echo "::group::$project"
+            dotnet test --project "$project" --no-restore
+            echo "::endgroup::"
+          done <<< "$SQL_TEST_PROJECTS"
+
+  js:
+    name: JavaScript tests
+    if: inputs.js-directories != ''
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install and test each directory
+        env:
+          JS_DIRECTORIES: ${{ inputs.js-directories }}
+        run: |
+          set -euo pipefail
+          while IFS= read -r directory; do
+            [ -z "$directory" ] && continue
+            echo "::group::$directory"
+            (cd "$directory" && npm ci && npm test --if-present)
+            echo "::endgroup::"
+          done <<< "$JS_DIRECTORIES"

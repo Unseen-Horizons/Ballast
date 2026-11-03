@@ -1,0 +1,50 @@
+name: Wait for URL
+description: >-
+  Waits until a URL answers with the expected HTTP status, then returns. Fails after timeout-seconds. Use it to wait for a server
+  the job started in the background.
+
+inputs:
+  url:
+    description: The address to call. Use a loopback address for a server the job started.
+    required: true
+  expect-status:
+    description: The HTTP status code that counts as an answer.
+    required: false
+    default: '200'
+  timeout-seconds:
+    description: How long to wait for the expected status before failing.
+    required: false
+    default: '120'
+  insecure:
+    description: 'true accepts a self-signed certificate, for a development server. Leave false otherwise.'
+    required: false
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - name: Wait for the URL to answer
+      shell: bash
+      env:
+        TARGET_URL: ${{ inputs.url }}
+        EXPECT_STATUS: ${{ inputs.expect-status }}
+        WAIT_SECONDS: ${{ inputs.timeout-seconds }}
+        ALLOW_INSECURE: ${{ inputs.insecure }}
+      run: |
+        set -uo pipefail
+        curl_args=(--silent --output /dev/null --write-out '%{http_code}' --max-time 5)
+        if [ "$ALLOW_INSECURE" = "true" ]; then
+          curl_args+=(--insecure)
+        fi
+        deadline=$(( $(date +%s) + WAIT_SECONDS ))
+        status="000"
+        while [ "$(date +%s)" -lt "$deadline" ]; do
+          status="$(curl "${curl_args[@]}" "$TARGET_URL" || true)"
+          if [ "$status" = "$EXPECT_STATUS" ]; then
+            echo "$TARGET_URL answered $status."
+            exit 0
+          fi
+          sleep 2
+        done
+        echo "::error::$TARGET_URL did not answer $EXPECT_STATUS within $WAIT_SECONDS seconds (last status: $status)."
+        exit 1

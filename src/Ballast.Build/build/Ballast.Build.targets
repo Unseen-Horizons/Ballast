@@ -1,0 +1,36 @@
+<Project>
+
+  <!--
+    The build stamp: the time a copy was built, written into the assembly as the metadata value "BuiltAtUtc". Ballast.Health reads
+    that key (BuildInfoReader.DefaultBuiltAtKey), so /health reports when the running copy was built.
+
+    The deploy passes the time with -p:BallastBuildTimeUtc=yyyy-MM-ddTHH:mm:ssZ (UTC). This file reads only that name. An app that
+    stamped its builds under an older property name maps it to BallastBuildTimeUtc itself, in its own project (docs/Build.md), so
+    this package names no app. A local build gives no time, and then the copy has no build time: /health reports it as null, never
+    a guess.
+
+    A value that is not an exact UTC time is an error. A malformed stamp would be a build time that /health cannot read.
+  -->
+  <PropertyGroup>
+    <_BallastBuildTimeUtc Condition="'$(BallastBuildTimeUtc)' != ''">$(BallastBuildTimeUtc)</_BallastBuildTimeUtc>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <_BallastBuildTimeUtcIsValid>$([System.Text.RegularExpressions.Regex]::IsMatch('$(_BallastBuildTimeUtc)', '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z\z'))</_BallastBuildTimeUtcIsValid>
+  </PropertyGroup>
+
+  <!-- An Error task is valid only inside a target, so the check runs before the build starts. -->
+  <Target Name="BallastCheckBuildTime" BeforeTargets="BeforeBuild">
+    <Error
+      Condition="'$(_BallastBuildTimeUtc)' != '' and '$(_BallastBuildTimeUtcIsValid)' != 'True'"
+      Text="The build time '$(_BallastBuildTimeUtc)' is not yyyy-MM-ddTHH:mm:ssZ (UTC). Pass it as BallastBuildTimeUtc in that form, or leave it out for a local build." />
+  </Target>
+
+  <ItemGroup Condition="'$(_BallastBuildTimeUtc)' != ''">
+    <AssemblyAttribute Include="System.Reflection.AssemblyMetadataAttribute">
+      <_Parameter1>BuiltAtUtc</_Parameter1>
+      <_Parameter2>$(_BallastBuildTimeUtc)</_Parameter2>
+    </AssemblyAttribute>
+  </ItemGroup>
+
+</Project>

@@ -17,3 +17,10 @@ has a short example that runs as written.
 - [Ballast.Http](Http.md): public-address guard, redirect rules, capped bodies, host credentials, safe log URLs, Retry-After and the polite fetcher.
 - [Ballast.SqlServer](SqlServer.md): SQL error classes, the enum and delete conventions, transactions, claims, sequences, batches, collation and connection checks.
 - [Ballast.Jobs](Jobs.md): the job lock, leader-only hosted services, the 409 for admin actions and the job-lock readiness check.
+- [Ballast.Testing](Testing.md): SQL Server test databases shared by several runs, captured logs, scripted HTTP fakes, test hosts and the source guard kit.
+- [Ballast.Build](Build.md): the shared analyzer and nullable settings, the analyzer severities, the NuGet audit and the build-time stamp.
+
+Tooling, not libraries:
+
+- [Deploy](Deploy.md): the PowerShell 7 deploy module, with its configuration, exit codes, migration guard and forbidden settings.
+- [CI](CI.md): the reusable .NET workflow, its two wait actions, the SQL Server service in Ballast's CI and the Semgrep rules.
