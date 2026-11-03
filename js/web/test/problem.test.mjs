@@ -78,6 +78,38 @@ describe('problemMessage', () => {
     assert.equal(problemMessage(500, { detail: 'Failed.', traceId: 't1' }), 'Failed. (ref t1)');
   });
 
+  const VALIDATION = {
+    title: 'One or more validation errors occurred.',
+    errors: { Email: ['Required.'] },
+    traceId: '00-abc-01'
+  };
+
+  it('gives the full text by default, and when both options are true', () => {
+    const full = 'One or more validation errors occurred. — Email: Required. (ref 00-abc-01)';
+    assert.equal(problemMessage(400, VALIDATION), full);
+    assert.equal(problemMessage(400, VALIDATION, { fieldErrors: true, traceId: true }), full);
+  });
+
+  it('leaves out the field messages when fieldErrors is false, and keeps the trace reference', () => {
+    assert.equal(problemMessage(400, VALIDATION, { fieldErrors: false }),
+      'One or more validation errors occurred. (ref 00-abc-01)');
+  });
+
+  it('leaves out the trace reference when traceId is false, and keeps the field messages', () => {
+    assert.equal(problemMessage(400, VALIDATION, { traceId: false }),
+      'One or more validation errors occurred. — Email: Required.');
+  });
+
+  it('leaves out both when both are false, leaving the title', () => {
+    assert.equal(problemMessage(400, VALIDATION, { fieldErrors: false, traceId: false }),
+      'One or more validation errors occurred.');
+  });
+
+  it('gives the mapped text alone when the field and trace options are off', () => {
+    const body = { code: 'SLOT_FULLY_BOOKED', errors: { Slot: ['Gone.'] }, traceId: 't9' };
+    assert.equal(problemMessage(409, body, { codeText: () => 'Fully booked.', fieldErrors: false, traceId: false }), 'Fully booked.');
+  });
+
   it('uses the text of the code from the code hook when the answer has a code', () => {
     const seen = [];
     const text = problemMessage(409, { code: 'SLOT_FULLY_BOOKED', detail: 'Full.' }, {

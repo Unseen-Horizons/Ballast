@@ -18,14 +18,28 @@ The package READMEs have examples that run as written. This guide covers every o
 |---|---|---|
 | `Path` | `/admin` | The path of the console's static files. The rule applies to the path and everything under it, by segment, so `/admin` covers `/admin/x.js` and not `/administrator`. The comparison ignores case. Must start with `/`. |
 | `CacheControl` | `no-cache` | The `Cache-Control` header of the files. `no-cache` allows a cache but makes it check the file first, so a deploy takes effect at once. |
-| `AllowInlineStyles` | true | Whether the style sheets may hold inline styles (`'unsafe-inline'` in `style-src`). The consoles write inline `style` attributes. Scripts are never allowed inline, whatever this is set to. |
+| `AllowInlineStyles` | true | Whether the style sheets may hold inline styles (`'unsafe-inline'` in `style-src`). The consoles write inline `style` attributes. Scripts are never allowed inline unless `AllowInlineScripts` is set. |
+| `AllowInlineScripts` | false | Whether scripts may be written inline (`'unsafe-inline'` in `script-src`, written first). **This is weaker than the default, and a console should keep it off.** Markup the page renders could then run as script if its escaping ever failed, so the policy no longer backs the escaping up. Turn it on only for a console whose own pages need inline script, and say why in the app. |
+| `ScriptSources` | empty | Extra origins for `script-src`, after `'self'` (and after `'unsafe-inline'` when `AllowInlineScripts` is on). Each origin named here can run code in the console. `'unsafe-inline'` and `'unsafe-eval'` are refused here (`ArgumentException`): inline script is turned on only with `AllowInlineScripts`, and eval is never allowed. |
 | `StyleSources` | empty | Extra origins or keywords for `style-src`, after `'self'`. |
 | `FontSources` | empty | Extra origins or keywords for `font-src`, after `'self'`. |
 | `ImageSources` | empty | Extra origins or keywords for `img-src`, after `'self' data:`. |
 | `ConnectSources` | empty | Extra origins or keywords for `connect-src`, after `'self'`. |
+| `WorkerSources` | empty | Extra origins or keywords for `worker-src`, after `'self'`. The directive is written only when this list is not empty; without it, workers follow `script-src`, which is `'self'` by default. |
 
 Every source an app adds is one more origin the page may load from, so name each on purpose. A source must not be blank, hold
 white space, hold a `;` or a `,`, or be `*`.
+
+The defaults write this policy, and a test pins it byte for byte:
+
+```
+default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; font-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'
+```
+
+The directives are always written in this order: `default-src`, `script-src`, `style-src`, `img-src`, `connect-src`, `font-src`,
+`worker-src` (only when set), `frame-ancestors`, `base-uri`, `form-action`. The order is fixed so the default output never moves.
+A policy written by hand in another order (for example with `font-src` before `img-src`) has the same directives and sources,
+and a browser reads both the same way; the text differs only in that order.
 
 ### AdminConsole
 
@@ -153,20 +167,24 @@ Returns `token()`, `setTokens(tokens)`, `clearTokens()`, `headers()`, `claims()`
 |---|---|---|
 | `storage` | `sessionStorage` | Where the tokens are kept. The tokens live only for the browser tab. |
 | `location` | `window.location` | The page's location. |
-| `fetch` | the page's `fetch` | The function the refresh uses. It is not wrapped, so a refresh never renews itself. |
+| `fetch` | the page's `fetch`, as it is when `createAuth` runs | The function the refresh and the sign-out use. It is captured once, and `install()` never changes it, so a refresh is never wrapped and never renews itself. |
 | `tokenKey` | `auth_token` | The storage key of the access token. |
 | `refreshKey` | `refresh_token` | The storage key of the refresh token. |
 | `redirectKey` | `redirect_after_login` | The storage key of the page to return to after sign-in. |
 | `loginPath` | `/admin/login.html` | The sign-in page. |
 | `loginPageSuffix` | `/login.html` | A page whose path ends with this is never redirected to sign-in. |
 | `refreshPath` | `/auth/refresh` | The refresh endpoint. It takes `{ refreshToken }` and answers `{ accessToken, refreshToken }`. |
-| `refreshTimeoutMs` | 15000 | How long a refresh may take before it counts as failed. |
+| `refreshTimeoutMs` | 15000 | How long a refresh may take before it counts as failed. The same bound applies to the sign-out request. |
+| `logoutPath` | `null` | The sign-out endpoint. When set, `signOut()` posts `{ refreshToken }` to it (JSON, `keepalive`, through the captured `fetch`), so the server can end the session. Null means `signOut()` only clears the tokens. |
 
 How it behaves:
 
 - **One refresh at a time.** The refresh token rotates: the server accepts it once. Concurrent callers share one refresh request,
   and every caller waits for it. The request is bounded by `refreshTimeoutMs`, so a stalled request cannot hold every later
   401 until a reload.
+- **A refused refresh fails at once.** The refresh and the sign-out use the `fetch` captured when `createAuth` runs, not the
+  page's `fetch` after `install()`. A refused refresh resolves false straight away; it never waits for its own answer through
+  the wrapper.
 - `refresh()` resolves to false when there is no refresh token, the server refuses it, the answer is not a token pair, or the
   request times out. A failed refresh does not clear the tokens by itself; the caller decides.
 - `install({ redirectWhenSignedOut })` wraps `window.fetch` for the console's own origin only. The bearer token is attached to
@@ -174,8 +192,12 @@ How it behaves:
   most 5 seconds). A 401 renews the token once and retries the request. A renewal that fails clears the tokens and sends the
   person to sign in. Tokens never go to another origin. With `redirectWhenSignedOut`, a page opened with no token goes to
   sign-in at once, except the sign-in page itself.
-- `toLogin()` keeps the current address under `redirectKey` and opens the sign-in page. `signOut()` clears both tokens and opens
-  the sign-in page. Nothing is kept for a later visit.
+- `toLogin()` keeps the current address under `redirectKey` and opens the sign-in page.
+- `signOut()` clears both tokens and opens the sign-in page. Nothing is kept for a later visit. With `logoutPath` set and a
+  refresh token stored, it first posts the refresh token there and waits for the answer, at most `refreshTimeoutMs`. The tokens
+  are cleared and the sign-in page is opened whatever the answer or a network failure. It returns a promise of `true` when the
+  server confirmed the sign-out (or there was nothing to send: no `logoutPath`, or no refresh token), and `false` when it did not.
+  The promise is always returned; without `logoutPath` the tokens are cleared at once, as before.
 - `requireSignedIn()` returns true when a token exists. Without one it calls `toLogin()` and returns false.
 - `setTokens({ accessToken, refreshToken })` throws a `TypeError` without an access token. A refresh token is kept only when one is given.
 - `decodeClaims(token)` reads the payload of a JWT without checking its signature. It returns null for anything that is not
@@ -262,9 +284,20 @@ Microsoft button, the return from Microsoft and the way back to the page the ope
 | `homePath` | `/admin/` | Where to go after sign-in when there is no back-link. |
 | `adminPrefix` | `/admin/` | The only path prefix a back-link may name. |
 | `loginPageSuffix` | `/login.html` | The sign-in page's file name, never a back-link target. |
-| `messages` | the defaults | Replaces the Microsoft refusal texts, one by one. |
-| `text` | the defaults | Replaces the page's wording, one by one. |
+| `messages` | the defaults | Replaces the Microsoft refusal texts, one by one. An object, or a function that returns one; a function is asked each time a refusal is drawn. |
+| `text` | the defaults | Replaces the page's wording, one by one. An object, or a function that returns one; a function is asked each time the page draws text, so the wording follows the language. |
+| `languageEvent` | `languageChanged` | The event that draws the page's text again. The `@ballast/web` loader dispatches `languageChanged` on the window when the language changes, with the new language in `detail.lang`. Null turns the redraw off. |
+| `eventTarget` | the window | What `languageEvent` is listened for on. |
 | `document`, `location`, `history`, `fetch` | the page's | The browser objects. |
+
+The page must supply, in its markup:
+
+- the show-password button (`reveal`), which is a button with an `aria-pressed="false"` attribute to start. Its state (`aria-pressed`),
+  its label (`aria-label` and `title`) and, when the button has one, its first element child (an icon, whose `class` and size
+  the page sets) are updated on each click and on a language change. The button may have no child: then only its state and label
+  change.
+- the submit button (`submit`), whose label is set to the sign-in text, or the signing-in text while a request is in flight.
+- the error line (`error`), which the page hides with the `hidden` class until there is a message.
 
 Behaviour:
 

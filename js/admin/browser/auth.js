@@ -26,7 +26,8 @@
     loginPath: '/admin/login.html',
     loginPageSuffix: '/login.html',
     refreshPath: '/auth/refresh',
-    refreshTimeoutMs: 15000
+    refreshTimeoutMs: 15000,
+    logoutPath: null
   };
 
   // Decodes the payload of a JWT (the middle part) as UTF-8 JSON. Null for anything that is not one.
@@ -47,14 +48,18 @@
    * @param {object} [options]
    * @param {object} [options.storage] sessionStorage, by default (getItem, setItem, removeItem)
    * @param {object} [options.location] window.location, by default
-   * @param {function} [options.fetch] the fetch the refresh uses, by default window.fetch (bound)
+   * @param {function} [options.fetch] the fetch the refresh and the sign-out use: by default window.fetch (bound), as it is when
+   *   createAuth runs. install() never changes it, so a refresh is never renewed by the wrapper.
    * @param {string} [options.tokenKey] 'auth_token' by default
    * @param {string} [options.refreshKey] 'refresh_token' by default
    * @param {string} [options.redirectKey] 'redirect_after_login' by default: where to go back to after sign-in
    * @param {string} [options.loginPath] the sign-in page, '/admin/login.html' by default
    * @param {string} [options.loginPageSuffix] a page whose path ends with this is never redirected to sign-in
    * @param {string} [options.refreshPath] '/auth/refresh' by default; it takes { refreshToken } and answers { accessToken, refreshToken }
-   * @param {number} [options.refreshTimeoutMs] how long a refresh may take before it counts as failed; 15000 by default
+   * @param {number} [options.refreshTimeoutMs] how long a refresh may take before it counts as failed; 15000 by default. The same
+   *   bound applies to the sign-out request.
+   * @param {string|null} [options.logoutPath] null by default. When set, signOut() posts { refreshToken } to it, so the server can
+   *   end the session.
    * @returns {object}
    */
   function createAuth(options) {
@@ -68,10 +73,19 @@
     var loginPageSuffix = opt.loginPageSuffix || DEFAULTS.loginPageSuffix;
     var refreshPath = opt.refreshPath || DEFAULTS.refreshPath;
     var refreshTimeoutMs = opt.refreshTimeoutMs || DEFAULTS.refreshTimeoutMs;
+    var logoutPath = opt.logoutPath || DEFAULTS.logoutPath;
+
+    // The fetch the refresh and the sign-out use, captured once. install() replaces root.fetch with a wrapper that renews a 401, so
+    // a refresh made through the wrapper would renew itself when it was refused and wait on its own answer. It is captured here
+    // (or at the first use, when there was no fetch yet), and install() reads it before it wraps root.fetch.
+    var nativeFetch = opt.fetch || (typeof root.fetch === 'function' ? root.fetch.bind(root) : null);
+    function baseFetch() {
+      if (!nativeFetch) nativeFetch = root.fetch.bind(root);
+      return nativeFetch;
+    }
 
     function storage() { return opt.storage || root.sessionStorage; }
     function location() { return opt.location || root.location; }
-    function baseFetch() { return opt.fetch || root.fetch.bind(root); }
 
     function token() {
       return storage().getItem(keys.token) || '';
@@ -104,10 +118,45 @@
       location().href = loginPath;
     }
 
-    /** Signs out: forgets both tokens and goes to the sign-in page. Nothing is kept for a later visit. */
+    /**
+     * Signs out: forgets both tokens and goes to the sign-in page. Nothing is kept for a later visit.
+     * With logoutPath set and a refresh token stored, the refresh token is first posted to logoutPath as { refreshToken } (JSON,
+     * keepalive, through the native fetch), so the server can end the session. The tokens are cleared, and the sign-in page is
+     * opened, whatever the answer or a network failure; a request still unanswered after refreshTimeoutMs counts as a failure.
+     * @returns {Promise<boolean>} true when the server confirmed the sign-out, or there was nothing to send (no logoutPath, or no
+     *   refresh token stored); false when the server did not. The tokens are cleared either way.
+     */
     function signOut() {
-      clearTokens();
-      location().href = loginPath;
+      var stored = storage().getItem(keys.refresh);
+      if (!logoutPath || !stored) {
+        clearTokens();
+        location().href = loginPath;
+        return Promise.resolve(true);
+      }
+
+      var timer = null;
+      var timedOut = new Promise(function (resolve) {
+        timer = setTimeout(function () { resolve(false); }, refreshTimeoutMs);
+      });
+      var answered = new Promise(function (resolve) {
+        resolve(baseFetch()(logoutPath, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken: stored }),
+          keepalive: true
+        }));
+      }).then(function (res) {
+        return !!res && res.ok === true;
+      }, function () {
+        return false;
+      });
+
+      return Promise.race([answered, timedOut]).then(function (confirmed) {
+        clearTimeout(timer);
+        clearTokens();
+        location().href = loginPath;
+        return confirmed;
+      });
     }
 
     /**
@@ -133,8 +182,9 @@
       var stored = storage().getItem(keys.refresh);
       if (!stored) return Promise.resolve(false);
 
+      var timer = null;
       var timeout = new Promise(function (_, reject) {
-        setTimeout(function () { reject(new Error('refresh timeout')); }, refreshTimeoutMs);
+        timer = setTimeout(function () { reject(new Error('refresh timeout')); }, refreshTimeoutMs);
       });
       refreshInFlight = Promise.race([
         baseFetch()(refreshPath, {
@@ -153,6 +203,7 @@
       }).catch(function () {
         return false;
       }).finally(function () {
+        clearTimeout(timer);
         refreshInFlight = null;
       });
 
