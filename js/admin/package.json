@@ -1,0 +1,29 @@
+{
+  "name": "@ballast/admin",
+  "version": "0.1.0-preview.1",
+  "description": "The staff console for a Ballast app: a shell with navigation and counts, sign-in with one shared refresh, the sign-in page with Microsoft, and the staff and roles page behind a data adapter. Classic scripts with no build step, served from the app's own origin.",
+  "license": "MPL-2.0",
+  "author": "Unseen Horizons",
+  "type": "commonjs",
+  "files": [
+    "browser/",
+    "README.md"
+  ],
+  "dependencies": {
+    "@ballast/web": "0.1.0-preview.1"
+  },
+  "scripts": {
+    "test": "node --test \"test/*.test.mjs\"",
+    "pack": "npm pack --pack-destination ../../artifacts/packages"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "keywords": [
+    "ballast",
+    "admin",
+    "console",
+    "sign-in",
+    "microsoft"
+  ]
+}

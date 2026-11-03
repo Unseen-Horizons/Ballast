@@ -2,7 +2,20 @@
 
   <PropertyGroup>
     <Title>Ballast.Translations</Title>
-    <Description>Parity checks for translation files: the same keys, no blank value, the same placeholders, a same-text allow-list, and a scan for the keys code asks for. Reads .resx and flat JSON.</Description>
+    <Description>Parity checks for translation files: the same keys, no blank value, the same placeholders, a same-text allow-list, and a scan for the keys code asks for. Reads .resx and flat JSON. Generates a site's culture JSON files and its i18n data script from its .resx files, during the build.</Description>
   </PropertyGroup>
+
+  <!--
+    The build task that runs the generator. Its dependency on the MSBuild task library is private to this package (PrivateAssets
+    all), so an app that only reads the library's types does not take it on. The targets file is imported by the package's build
+    folder, and does nothing unless a project sets BallastI18nBaseName.
+  -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Build.Utilities.Core" PrivateAssets="all" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="build\Ballast.Translations.targets" Pack="true" PackagePath="build\" />
+  </ItemGroup>
 
 </Project>

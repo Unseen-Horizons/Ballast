@@ -64,6 +64,9 @@
     <!-- Microsoft.IdentityModel has its own version line (not 10.0.x). The session token is signed and validated with it. -->
     <PackageVersion Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.23.0" />
   </ItemGroup>
+  <ItemGroup Label="Build-time task of Ballast.Translations (private to that package, not a runtime dependency)">
+    <PackageVersion Include="Microsoft.Build.Utilities.Core" Version="18.0.2" />
+  </ItemGroup>
   <ItemGroup Label="Build-time, CI only">
     <!-- The 10.0.x line of the .NET SDK pinned in global.json. -->
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.401" />

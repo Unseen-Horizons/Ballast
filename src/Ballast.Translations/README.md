@@ -5,6 +5,10 @@ difference as a problem that a test can print: a key missing from one file, a bl
 that is still the same as the base, an allow-list entry that is no longer needed, and a key that source code asks for but the
 base file does not hold. It depends on .NET alone, and the test that uses it is a plain `Assert.Empty`.
 
+It can also generate a site's translation files at build time: a JSON file for each culture and the script that the pages load,
+from the site's .resx files. The package's build task does it when a project sets `BallastI18nBaseName`. The guide has the
+options, and what the generator refuses.
+
 Install:
 
 ```

@@ -21,3 +21,5 @@ has a short example that runs as written.
 - [Ballast.Feedback](Feedback.md): the feedback request with its caps, the manager over a store, and the client that sends it.
 - [Ballast.AppUpdates](AppUpdates.md): the build check: the version answer and its client, the update rules, and the store and install-channel contracts.
 - [Ballast.Maui](Maui.md): sealed on-device storage, connectivity state, HTTP client setup, the AdMob banner and native cards, the localisation runtime, crash reports, permission asks, the store review prompt and view helpers.
+- [Ballast.Admin](Admin.md): the staff console kit, server and browser: its content security policy and headers, the "who am I" answer, the sign-in state, the page shell, the sign-in page and the staff-and-roles page.
+- [@ballast/web](Web.md): the browser helpers for pages (escaping, the instant of a server string, problem answers, the translation loader, place and event times) and the vendor-copy script.
