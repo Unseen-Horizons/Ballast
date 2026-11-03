@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Ballast.Feedback\Ballast.Feedback.csproj" />
+    <ProjectReference Include="..\..\src\Ballast.Errors\Ballast.Errors.csproj" />
+    <ProjectReference Include="..\..\src\Ballast.Paging\Ballast.Paging.csproj" />
+  </ItemGroup>
+
+</Project>
