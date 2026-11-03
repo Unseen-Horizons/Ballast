@@ -7,6 +7,7 @@ using System.Threading;
 
 using Android.Views;
 
+using Ballast.AppUpdates;
 using Ballast.Maui.Diagnostics;
 using Ballast.Maui.Platform;
 

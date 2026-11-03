@@ -1,0 +1,13 @@
+<Project>
+
+  <!--
+    Imported by NuGet into any project that references the Ballast.Maui package. On Android it adds the package's R8 consumer rule:
+    Credential Manager (Google sign-in) finds its Play Services provider by reflection, so R8 must keep it, or sign-in fails at run
+    time while the build still succeeds. Nothing is needed in the app. A project that references this library by ProjectReference
+    does not import this file, so it keeps its own copy of the rule until it uses the package.
+  -->
+  <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+    <ProguardConfiguration Include="$(MSBuildThisFileDirectory)Ballast.Maui.proguard.cfg" />
+  </ItemGroup>
+
+</Project>
