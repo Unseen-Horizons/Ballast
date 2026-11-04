@@ -286,6 +286,18 @@ registration is used. The default keeps nothing, so each call does nothing.
 - A key the app sets in `CreatingAsync` is kept as it is. The app's mapping must then say that the database does not
   generate that key.
 
+### Marks for the app to show (MicrosoftStaffMarks)
+
+`MicrosoftStaffMarks` is public so an app can show what the library wrote, read-only. An app reads these; it never writes them.
+
+| Member | What it is | What the app may do with it |
+|---|---|---|
+| `SourceClaimType` (`source`) | The role claim type the library sets on a role it created from Microsoft. | Read the role's claims to find these roles. |
+| `SourceMicrosoft` (`microsoft`) | The value of that claim on such a role. | Show the role as Microsoft's. Its permissions are still set in the app, and an app must not delete or rename it. |
+| `IsSwitchedOff(lockoutEnd, now)` | True when an account's lockout is the directory sync's switch-off, rather than Identity's own failed-sign-in lockout. | Show the account as switched off. A failed-sign-in lockout is not reported here. |
+
+Each member is a constant or a pure check, so reading it has no side effect.
+
 ### Options (MicrosoftSignInOptions)
 
 | Property | Config key | Default | Meaning |
