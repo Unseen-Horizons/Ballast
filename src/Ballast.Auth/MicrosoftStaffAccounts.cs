@@ -9,21 +9,37 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Ballast.Auth;
 
-/// <summary>The marks the library puts on a role it creates from Microsoft, and the reading of a switched-off account.</summary>
-internal static class MicrosoftStaffMarks
+/// <summary>
+/// The marks the library writes on staff accounts and roles, read by the app to show them. An app reads these; it does not write them. The
+/// library sets the marks when it creates or switches an account, and an app that changes a mark would make the library's next sync disagree
+/// with its own data. The members are constants and one pure check, so reading them has no side effect.
+/// </summary>
+public static class MicrosoftStaffMarks
 {
-    /// <summary>The role claim that marks a role created from Microsoft. Its permissions are set in the app, not in Microsoft.</summary>
+    /// <summary>
+    /// The role claim type that marks a role the library created from Microsoft. An app may show such a role as Microsoft's, read-only: its
+    /// permissions are set in the app, and an app must not delete or rename it, because the sync lists a role it no longer finds in Microsoft
+    /// and never deletes it.
+    /// </summary>
     public const string SourceClaimType = "source";
 
-    /// <summary>The value of <see cref="SourceClaimType"/> for a role created from Microsoft.</summary>
+    /// <summary>
+    /// The value of <see cref="SourceClaimType"/> on a role the library created from Microsoft. An app may compare a role's claim with it to
+    /// show the role as Microsoft's; no other value of that claim means Microsoft created the role.
+    /// </summary>
     public const string SourceMicrosoft = "microsoft";
 
     // Identity's own lockouts last minutes. A lockout this far ahead can only be the switch-off, which sets DateTimeOffset.MaxValue.
     private static readonly TimeSpan SwitchOffHorizon = TimeSpan.FromDays(365 * 100);
 
-    /// <summary>True when the account's lockout is the switch-off, not one Identity set itself.</summary>
-    /// <param name="lockoutEnd">The account's lockout end, or null.</param>
-    /// <param name="now">The time now.</param>
+    /// <summary>
+    /// True when an account is switched off by the directory sync, rather than locked by Identity's own failed sign-ins. An app may show such an
+    /// account as switched off, read-only. A lockout that is not the switch-off is not reported here, so a failed-sign-in lockout is never
+    /// shown as a removed staff member.
+    /// </summary>
+    /// <param name="lockoutEnd">The account's lockout end, or null when it has none.</param>
+    /// <param name="now">The time now, as a UTC instant.</param>
+    /// <returns>True when the lockout is the sync's switch-off.</returns>
     public static bool IsSwitchedOff(DateTimeOffset? lockoutEnd, DateTimeOffset now) =>
         lockoutEnd is { } end && end - now > SwitchOffHorizon;
 }

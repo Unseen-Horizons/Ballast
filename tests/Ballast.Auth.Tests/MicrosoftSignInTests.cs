@@ -379,7 +379,7 @@ public class MicrosoftSignInTests
             var roles = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<string>>>();
             var role = new IdentityRole<string>("Retired") { Id = Guid.NewGuid().ToString("D") };
             Assert.True((await roles.CreateAsync(role)).Succeeded);
-            Assert.True((await roles.AddClaimAsync(role, new Claim("source", "microsoft"))).Succeeded);
+            Assert.True((await roles.AddClaimAsync(role, new Claim(MicrosoftStaffMarks.SourceClaimType, MicrosoftStaffMarks.SourceMicrosoft))).Succeeded);
         }
 
         // Nobody is assigned in Microsoft any more, so the role made from it is no longer named.
@@ -392,6 +392,48 @@ public class MicrosoftSignInTests
         Assert.Contains(result.Problems, problem => problem.Code == MicrosoftSyncProblems.RoleNotInMicrosoft && problem.Subject == "Retired");
         await using var check = host.Scope();
         Assert.True(await check.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<string>>>().RoleExistsAsync("Retired"));
+    }
+
+    [Fact]
+    public void The_public_marks_have_the_values_the_library_writes()
+    {
+        Assert.Equal("source", MicrosoftStaffMarks.SourceClaimType);
+        Assert.Equal("microsoft", MicrosoftStaffMarks.SourceMicrosoft);
+    }
+
+    [Fact]
+    public void The_switch_off_is_read_from_a_lockout_far_ahead_and_never_from_an_ordinary_lockout()
+    {
+        var now = new DateTimeOffset(2026, 11, 4, 9, 0, 0, TimeSpan.Zero);
+
+        Assert.False(MicrosoftStaffMarks.IsSwitchedOff(null, now));
+        Assert.False(MicrosoftStaffMarks.IsSwitchedOff(now.AddMinutes(15), now));
+        Assert.False(MicrosoftStaffMarks.IsSwitchedOff(now.AddDays(1), now));
+        Assert.True(MicrosoftStaffMarks.IsSwitchedOff(DateTimeOffset.MaxValue, now));
+    }
+
+    [Fact]
+    public async Task A_sync_switch_off_is_shown_as_switched_off_and_a_failed_sign_in_lockout_is_not()
+    {
+        var graph = new FakeGraph();
+        await using var host = await HostAsync(graph: graph, sync: true, configure: o => o.FullAccessRole = "Admin");
+        var anaId = await MicrosoftAccountAsync(host, "ana@example.test", Ana);
+        var boId = await MicrosoftAccountAsync(host, "bo@example.test", Bo);
+
+        // Bo leaves the directory, and the sync switches Bo off. Ana stays, and is locked by nothing.
+        graph.Snapshot = Directory((Ana, "ana@example.test", "Ana", "Horvat"));
+        await using (var run = host.Scope())
+        {
+            await run.ServiceProvider.GetRequiredService<MsSync>().RunOnceAsync();
+        }
+
+        await using var check = host.Scope();
+        var users = check.ServiceProvider.GetRequiredService<UserManager<StringUser>>();
+        var now = DateTimeOffset.UtcNow;
+        var bo = await users.FindByIdAsync(boId);
+        var ana = await users.FindByIdAsync(anaId);
+        Assert.True(MicrosoftStaffMarks.IsSwitchedOff((await users.GetLockoutEndDateAsync(bo!)), now));
+        Assert.False(MicrosoftStaffMarks.IsSwitchedOff((await users.GetLockoutEndDateAsync(ana!)), now));
     }
 
     [Fact]
