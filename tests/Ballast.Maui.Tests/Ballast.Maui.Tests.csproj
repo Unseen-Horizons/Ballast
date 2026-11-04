@@ -6,6 +6,7 @@
   -->
   <ItemGroup>
     <ProjectReference Include="..\..\src\Ballast.Maui\Ballast.Maui.csproj" />
+    <ProjectReference Include="..\..\src\Ballast.Testing\Ballast.Testing.csproj" />
     <!-- The server's answer types, read by the app's session code in the parity test (AppAttestationParityTests). -->
     <ProjectReference Include="..\..\src\Ballast.AppAttestation\Ballast.AppAttestation.csproj" />
   </ItemGroup>

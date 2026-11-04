@@ -212,6 +212,11 @@ The install channel of this install (`IInstallChannel`, and its fixed version fo
 `AskStoreAsync` is how the app asks an updater. A timeout of a few seconds is typical: the store's answer must not hold up the
 check, and the server's rule decides when the store does not answer in time.
 
+Ballast.Maui's `AppVersionService` passes its optional `ILogger` (its last constructor parameter, null by default) to
+`AskStoreAsync`, so each reason the store's answer is not used (no answer, a failed call, no build number) is logged once per
+check. Its "No update check" line is written to `Trace`, and names the platform from `IUpdateDevice.PlatformName` (null by
+default, so the line says "this platform").
+
 ## State: `AppUpdateState`
 
 A record the app builds for its screen: `Decision`, `CurrentBuild`, `LatestBuild`, `LatestVersion`, `StoreUrl`, `Message`, `Channel`.

@@ -3,6 +3,7 @@
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <ProjectReference Include="..\..\src\Ballast.Auth\Ballast.Auth.csproj" />
+    <ProjectReference Include="..\..\src\Ballast.Testing\Ballast.Testing.csproj" />
     <PackageReference Include="BCrypt.Net-Next" />
     <PackageReference Include="Microsoft.AspNetCore.TestHost" />
     <PackageReference Include="Microsoft.Data.SqlClient" />

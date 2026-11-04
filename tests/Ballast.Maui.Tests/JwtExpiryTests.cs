@@ -53,6 +53,39 @@ public class JwtExpiryTests
         Assert.False(JwtExpiry.EndsWithin(token, now, TimeSpan.FromMinutes(5)));
     }
 
+    [Theory]
+    [InlineData("[1]")]
+    [InlineData("\"text\"")]
+    [InlineData("1800000000")]
+    [InlineData("null")]
+    public void A_payload_that_is_json_but_not_an_object_has_no_end(string payload)
+    {
+        var now = new DateTimeOffset(2026, 10, 5, 12, 0, 0, TimeSpan.Zero);
+        var token = Jwt(payload);
+
+        Assert.Null(JwtExpiry.Read(token));
+        Assert.False(JwtExpiry.EndsWithin(token, now, TimeSpan.FromMinutes(5)));
+    }
+
+    [Theory]
+    [InlineData("{\"exp\":\"1800000000\"}")]
+    [InlineData("{\"exp\":null}")]
+    [InlineData("{\"exp\":true}")]
+    [InlineData("{\"exp\":[1800000000]}")]
+    [InlineData("{\"exp\":1800000000.5}")]
+    public void An_exp_that_is_not_a_whole_number_has_no_end(string payload)
+    {
+        var now = new DateTimeOffset(2026, 10, 5, 12, 0, 0, TimeSpan.Zero);
+        var token = Jwt(payload);
+
+        Assert.Null(JwtExpiry.Read(token));
+        Assert.False(JwtExpiry.EndsWithin(token, now, TimeSpan.FromMinutes(5)));
+    }
+
+    [Fact]
+    public void An_exp_too_large_to_be_a_date_has_no_end() =>
+        Assert.Null(JwtExpiry.Read(Jwt("{\"exp\":9223372036854775807}")));
+
     [Fact]
     public void A_token_already_past_its_end_is_due()
     {

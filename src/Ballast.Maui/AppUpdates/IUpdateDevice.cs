@@ -18,4 +18,10 @@ public interface IUpdateDevice
     /// skipped when it differs from the stamp.
     /// </summary>
     string? ManifestBuildText { get; }
+
+    /// <summary>
+    /// The platform's own name for the log, such as <c>Android</c> or <c>WinUI</c>, or null when the device does not say. Only the log
+    /// uses it; the server is asked for <see cref="PlatformQueryName"/>. Null by default, so an existing implementation keeps compiling.
+    /// </summary>
+    string? PlatformName => null;
 }
