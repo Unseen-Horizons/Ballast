@@ -193,7 +193,7 @@ $script:FakeGit = {
                 foreach ($relative in @($script:WorktreeFiles)) {
                     $full = Join-Path $dir $relative
                     $null = [System.IO.Directory]::CreateDirectory((Split-Path -Parent $full))
-                    [System.IO.File]::WriteAllText($full, 'selftest')
+                    [System.IO.File]::WriteAllText($full, $(if ($relative -like '*dotnet-tools.json') { $script:ToolManifestText } else { 'selftest' }))
                 }
                 $script:CreatedDirs += $dir
             }
@@ -208,12 +208,18 @@ $script:FakeProcess = {
     $a = @($Arguments)
     $null = $script:Log.Add("run $FilePath " + ($a -join ' '))
     $script:LastChildEnv = $Environment
+    if ($a.Count -ge 3 -and $a[0] -eq 'ef' -and $a[1] -eq 'migrations' -and $a[2] -eq 'list') { $script:ListChildEnv = $Environment }
+    if ($Environment -and $Environment.ContainsKey('Storage__DataRoot')) {
+        $script:DataRootFolders += [string]$Environment['Storage__DataRoot']
+        $null = $script:DataRootMarkerSeen.Add((Test-Path -LiteralPath (Join-Path ([string]$Environment['Storage__DataRoot']) '.getthere-data-root')))
+    }
     if ($FilePath -like '*efbundle*') {
         $null = $script:Log.Add('bundle-apply')
         return (New-Result -Code $script:ApplyExit -Output @('applying (selftest)'))
     }
     if ($FilePath -ne 'dotnet') { return (New-Result) }
     switch ($a[0]) {
+        '--version' { return (New-Result -Output @($script:FakeSdkVersion)) }
         'publish' {
             $out = ''
             for ($i = 0; $i -lt $a.Count - 1; $i++) { if ($a[$i] -eq '-o') { $out = [string]$a[$i + 1] } }
@@ -223,6 +229,7 @@ $script:FakeProcess = {
         }
         'test' { return (New-Result -Code $script:GuardExit -Output $script:GuardOutput) }
         'ef' {
+            if ($a[1] -eq '--version') { return (New-Result -Output @('Entity Framework Core .NET Command-line Tools', $script:FakeEfVersion)) }
             if ($a[2] -eq 'list') { return (New-Result -Output (Get-NextAnswer -Queue $script:ListAnswers)) }
             if ($a[2] -eq 'bundle') {
                 $out = ''
@@ -290,6 +297,10 @@ function Reset-Fakes {
     $script:GuardExit = 0
     $script:GuardOutput = @('Passed!')
     $script:ApplyExit = 0
+    $script:FakeSdkVersion = '10.0.100'
+    $script:FakeEfVersion = '10.0.0'
+    $script:DataRootFolders = @()
+    $script:DataRootMarkerSeen = [System.Collections.ArrayList]::new()
     $script:ListAnswers = [System.Collections.Queue]::new()
     $script:HealthAnswers = [System.Collections.Queue]::new()
     $script:ReadyAnswers = [System.Collections.Queue]::new()
@@ -312,6 +323,7 @@ $script:GoodSettingsJson = '[{"name":"WEBSITE_RUN_FROM_PACKAGE","value":"1"},{"n
     '{"name":"ENABLE_ORYX_BUILD","value":"false"},{"name":"ApiSecret","value":"sentinel-setting-value-77"}]'
 $script:MigrationSettingsJson = '[{"name":"WEBSITE_RUN_FROM_PACKAGE","value":"1"},{"name":"ConnectionStrings__DefaultConnection",' +
     '"value":"Server=tcp:example-sql.database.windows.net,1433;Initial Catalog=ExampleDb;User ID=example;Password=sentinel-pw-42;"}]'
+$script:ToolManifestText = '{"version":1,"isRoot":true,"tools":{"dotnet-ef":{"version":"10.0.0","commands":["dotnet-ef"]}}}'
 $script:PendingListing = '[{"id":"20260101000000_Initial","applied":true},{"id":"20261020000000_AddColumn","applied":false}]'
 $script:AppliedListing = '[{"id":"20260101000000_Initial","applied":true},{"id":"20261020000000_AddColumn","applied":true}]'
 $script:AppLines = @(
@@ -374,7 +386,7 @@ function Set-DeployFixtures {
     Reset-Fakes
     $script:GitRefs['HEAD'] = $script:Sha
     if (-not $Unpushed) { $script:PushedShas[$script:Sha] = $true }
-    $script:WorktreeFiles = @('src/Api/Api.csproj', 'src/Map/Map.csproj', 'tests/Guard/Guard.csproj')
+    $script:WorktreeFiles = @('src/Api/Api.csproj', 'src/Map/Map.csproj', 'tests/Guard/Guard.csproj', '.config/dotnet-tools.json')
     Set-Az 'account show' (New-Result -Output @($script:Previous))
     Set-Az 'account list' (New-Result -Output @($script:Accounts))
     Set-Az 'account set' (New-Result)
@@ -431,9 +443,9 @@ function Invoke-DeployCaptured {
 }
 
 function Invoke-MigrationsCaptured {
-    param([Parameter(Mandatory)][hashtable]$Config, [string]$Bundle = '', [switch]$WhatIf, [switch]$Yes)
+    param([Parameter(Mandatory)][hashtable]$Config, [string]$Bundle = '', [switch]$WhatIf, [switch]$Yes, [string]$Database = '')
     $all = @(& {
-            Invoke-BallastMigrations -Config $Config -App 'api' -RepoPath $script:RepoDir -BundlePath $Bundle -WhatIf:$WhatIf -Yes:$Yes
+            Invoke-BallastMigrations -Config $Config -App 'api' -RepoPath $script:RepoDir -BundlePath $Bundle -WhatIf:$WhatIf -Yes:$Yes -Database $Database
         } *>&1)
     $result = $all | Where-Object { $_ -is [pscustomobject] -and $_.PSObject.Properties['ExitCode'] } | Select-Object -Last 1
     return [pscustomobject]@{ Result = $result; Text = ($all | Out-String) }
@@ -452,6 +464,7 @@ try {
     Write-TestFile -Path (Join-Path $script:RepoDir 'src/Map/Map.csproj') -Content '<Project />'
     Write-TestFile -Path (Join-Path $script:RepoDir 'tests/Guard/Guard.csproj') -Content '<Project />'
     Write-TestFile -Path $bundlePath -Content 'bundle (selftest)'
+    Write-TestFile -Path (Join-Path $script:RepoDir '.config/dotnet-tools.json') -Content $script:ToolManifestText
     Set-ModuleRunners
     Reset-Fakes
 
@@ -1068,6 +1081,91 @@ try {
         ($out.Result.ExitCode -eq 0) -and ((Measure-LogCount '*--query collation*') -eq 0)
     }
 
+    Check 'Invoke-BallastMigrations: ThrowawayDirectories gives the EF calls a folder with the marker, and removes it after a clean run' {
+        Set-MigrationFixtures
+        $script:ListAnswers.Enqueue(@($script:PendingListing))
+        $script:ListAnswers.Enqueue(@($script:AppliedListing))
+        $config = New-TestConfig -WithMigrations -WithGuard
+        $config.Apps['api']['Migrations']['ThrowawayDirectories'] = @{ Storage__DataRoot = '.getthere-data-root' }
+        $out = Invoke-MigrationsCaptured -Config $config -Bundle $bundlePath -Yes
+        $folders = @($script:DataRootFolders | Select-Object -Unique)
+        ($out.Result.ExitCode -eq 0) -and ($folders.Count -eq 1) -and ($script:DataRootMarkerSeen.Count -ge 3) -and
+            (@($script:DataRootMarkerSeen | Where-Object { -not $_ }).Count -eq 0) -and (-not (Test-Path -LiteralPath $folders[0]))
+    }
+
+    Check 'Invoke-BallastMigrations: the ThrowawayDirectories folder is removed when the run fails (guard failed)' {
+        Set-MigrationFixtures
+        $script:ListAnswers.Enqueue(@($script:PendingListing))
+        $script:GuardExit = 1
+        $script:GuardOutput = @('MIGRATION-GUARD 20261020000000_AddColumn drops a column')
+        $config = New-TestConfig -WithMigrations -WithGuard
+        $config.Apps['api']['Migrations']['ThrowawayDirectories'] = @{ Storage__DataRoot = '.getthere-data-root' }
+        $out = Invoke-MigrationsCaptured -Config $config -Bundle $bundlePath -Yes
+        $folder = @($script:DataRootFolders)[0]
+        ($out.Result.ExitCode -eq 1) -and [bool]$folder -and (-not (Test-Path -LiteralPath $folder))
+    }
+
+    Check 'Resolve-BallastConfig: a ThrowawayDirectories marker that is not a plain file name is refused' {
+        $cfg = New-TestConfig -WithMigrations
+        $cfg.Apps['api']['Migrations']['ThrowawayDirectories'] = @{ Storage__DataRoot = 'nested/marker' }
+        Test-Throws { & $module { param($c) Resolve-BallastConfig -Config $c } $cfg }
+    }
+
+    Check 'Invoke-BallastMigrations: with no -BundlePath, the bundle is built from a worktree of the ref and applied (exit 0)' {
+        Set-MigrationFixtures
+        $script:GitRefs['HEAD'] = $script:Sha
+        $script:WorktreeFiles = @('.config/dotnet-tools.json', 'src/Api/Api.csproj', 'tests/Guard/Guard.csproj')
+        $script:ListAnswers.Enqueue(@($script:PendingListing))
+        $script:ListAnswers.Enqueue(@($script:AppliedListing))
+        $out = Invoke-MigrationsCaptured -Config (New-TestConfig -WithMigrations -WithGuard) -Yes
+        ($out.Result.ExitCode -eq 0) -and ((Measure-LogCount 'git worktree add*') -eq 1) -and
+            ((Measure-LogCount 'run dotnet ef migrations bundle*') -eq 1) -and ((Measure-LogCount 'bundle-apply') -eq 1)
+    }
+
+    Check 'Invoke-BallastMigrations: an SDK below MinimumSdkMajor is refused before any Azure call (exit 1)' {
+        Set-MigrationFixtures
+        $script:FakeSdkVersion = '7.0.400'
+        $out = Invoke-MigrationsCaptured -Config (New-TestConfig -WithMigrations -WithGuard) -Bundle $bundlePath -WhatIf
+        ($out.Result.ExitCode -eq 1) -and ((Measure-LogCount 'az *') -eq 0) -and ($out.Text -match 'Found: 7\.0\.400')
+    }
+
+    Check 'Invoke-BallastMigrations: MinimumSdkMajor from the config is the minimum (11 refuses an SDK 10)' {
+        Set-MigrationFixtures
+        $out = Invoke-MigrationsCaptured -Config (New-TestConfig -WithMigrations -WithGuard -Options @{ MinimumSdkMajor = 11 }) -Bundle $bundlePath -WhatIf
+        ($out.Result.ExitCode -eq 1) -and ($out.Text -match 'dotnet 11 or later')
+    }
+
+    Check 'Invoke-BallastMigrations: a dotnet-ef that is not the pinned version is refused before any Azure call (exit 1)' {
+        Set-MigrationFixtures
+        $script:FakeEfVersion = '9.0.0'
+        $out = Invoke-MigrationsCaptured -Config (New-TestConfig -WithMigrations -WithGuard) -Bundle $bundlePath -WhatIf
+        ($out.Result.ExitCode -eq 1) -and ((Measure-LogCount 'az *') -eq 0) -and ($out.Text -match 'pins 10\.0\.0')
+    }
+
+    Check 'Invoke-BallastMigrations: -Database changes only the catalog of the connection the EF commands get' {
+        Set-MigrationFixtures
+        $script:ListAnswers.Enqueue(@($script:PendingListing))
+        $out = Invoke-MigrationsCaptured -Config (New-TestConfig -WithMigrations -WithGuard) -Bundle $bundlePath -WhatIf -Database 'ExampleDbRehearsal'
+        $conn = [string]$script:ListChildEnv['ConnectionStrings__DefaultConnection']
+        ($out.Result.ExitCode -eq 0) -and ($conn -match 'Initial Catalog=ExampleDbRehearsal;') -and
+            ($conn -match 'Server=tcp:example-sql\.database\.windows\.net,1433;') -and
+            ((Measure-LogCount 'az sql db show -g example-rg -s example-sql -n ExampleDbRehearsal*') -eq 1) -and ($out.Text -match 'rehearsal: ExampleDbRehearsal')
+    }
+
+    Check 'Invoke-BallastMigrations: -Database naming the app''s own database is refused, in any case, before the firewall rule' {
+        Set-MigrationFixtures
+        $same = Invoke-MigrationsCaptured -Config (New-TestConfig -WithMigrations -WithGuard) -Bundle $bundlePath -WhatIf -Database 'ExampleDb'
+        $otherCase = Invoke-MigrationsCaptured -Config (New-TestConfig -WithMigrations -WithGuard) -Bundle $bundlePath -WhatIf -Database 'exampledb'
+        ($same.Result.ExitCode -eq 1) -and ($otherCase.Result.ExitCode -eq 1) -and ($same.Text -match 'names ExampleDb, the app') -and
+            ((Measure-LogCount 'az sql server firewall-rule create*') -eq 0)
+    }
+
+    Check 'Invoke-BallastMigrations: a -Database name that is not a database name is refused (exit 1)' {
+        Set-MigrationFixtures
+        $out = Invoke-MigrationsCaptured -Config (New-TestConfig -WithMigrations -WithGuard) -Bundle $bundlePath -WhatIf -Database 'bad;name'
+        ($out.Result.ExitCode -eq 1) -and ((Measure-LogCount 'az sql server firewall-rule create*') -eq 0)
+    }
+
     Check 'Invoke-BallastMigrations: the connection string and its password are never printed' {
         Set-MigrationFixtures
         $script:ListAnswers.Enqueue(@($script:PendingListing))
@@ -1104,6 +1202,13 @@ try {
     }
 
     # ===== J. Deploy ===========================================================================================
+
+    Check 'Invoke-BallastDeploy: an SDK below MinimumSdkMajor is refused before any Azure call (exit 1)' {
+        Set-DeployFixtures -WithMigrations
+        $script:FakeSdkVersion = '7.0.400'
+        $out = Invoke-DeployCaptured -Config (New-TestConfig -WithMigrations -WithGuard) -Yes
+        ($out.Result.ExitCode -eq 1) -and ((Measure-LogCount 'az *') -eq 0) -and ($out.Text -match 'Found: 7\.0\.400')
+    }
 
     Check 'Invoke-BallastDeploy: an app name that is not in the config is exit 1, and nothing runs' {
         Set-DeployFixtures

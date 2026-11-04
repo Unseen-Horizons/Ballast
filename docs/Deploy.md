@@ -96,6 +96,7 @@ The app name (the key, `api` above) must be lower-case letters, digits and hyphe
 | `Guard` | no | The migration-safety guard: `Project` (its test project) and `Filter` (the `--filter-class` value). See "The migration guard". Without it the guard is unavailable. |
 | `Environment` | no | Environment variables for the EF tools and the bundle. Their values must not be secrets. |
 | `ThrowawayVariables` | no | Variable names that receive a random value for each run only, such as a signing key that the app needs at startup. Nothing is stored. |
+| `ThrowawayDirectories` | no | A map of variable name to marker file name, such as `Storage__DataRoot = '.getthere-data-root'`. For each run the module makes a fresh temporary folder that holds the marker file, sets the variable to its path for the EF commands and the bundle only, and deletes the folder when the run ends, whatever happens. Use it for an app that refuses to start without a data folder. |
 
 The connection string itself is read from the web app and passed to the child process in an environment variable. It is never printed.
 
@@ -108,6 +109,7 @@ The connection string itself is read from the web app and passed to the child pr
 | `TagPushAttempts` | 3 | Tries to push a deploy tag. A refused push reads the next free number again. |
 | `TagPushDelaySeconds` | 5 | Pause between tag push attempts. |
 | `TagDateFormat` | `yyyy-MM-dd` | The date in a tag name: `yyyy-MM-dd` (the default) or `yyyyMMdd`, for an owner whose tags already use it. A tag reads `deploy/api/2026-11-03-1`. |
+| `MinimumSdkMajor` | 8 | The lowest .NET SDK major version the migrations accept. The preflight reads `dotnet --version` and refuses a lower one before anything runs. Set it to the version the app builds with. |
 | `RuntimeIdentifier` | `linux-x64` | The `dotnet publish` runtime identifier. |
 | `ListRetries` | 6 | Tries again after a refused database connection while reading the migration list. |
 | `ListRetryDelaySeconds` | 20 | Pause between those tries. |
@@ -140,8 +142,8 @@ Returns an object with `ExitCode`, `Message`, and `Apps` (each with `App`, `WebA
 
 What a run does:
 
-- **Guards (nothing changes in Azure).** Fetches `origin` and resolves `-Ref`. Refuses a commit that is not on `origin`, and a missing git committer identity. For each app, selects its subscription, checks that it runs from its package and that it has no forbidden setting, and reads whether the live commit is newer than the commit being deployed (a warning when the deploy would roll back). Then asks `Deploy ... ?` with a default of no.
-- **Build.** Builds each app with `dotnet publish` from a clean worktree of the commit, with `BallastBuildTimeUtc` set to one build time for the run. Zips each app. For an app with migrations, builds the EF bundle from the same worktree (not under `-WhatIf`).
+- **Guards (nothing changes in Azure).** Fetches `origin` and resolves `-Ref`. Refuses a commit that is not on `origin`, and a missing git committer identity. For an app with migrations, it runs the .NET SDK and dotnet-ef preflight (see `Invoke-BallastMigrations`). For each app, selects its subscription, checks that it runs from its package and that it has no forbidden setting, and reads whether the live commit is newer than the commit being deployed (a warning when the deploy would roll back). Then asks `Deploy ... ?` with a default of no.
+- **Build.** Builds each app with `dotnet publish` from a clean worktree of the commit, with `BallastBuildTimeUtc` set to one build time for the run. Zips each app. For an app with migrations, builds the EF bundle from the same worktree (not under `-WhatIf`), with the run's environment: the connection string and the throwaway values, so a startup that needs them builds too.
 - **Per app, in order.** Migrations (when the app has them), the zip deploy, the proof of the switch, and the tag. A failure stops the run before the next app. The temporary worktree is removed and the az default subscription is put back in every case.
 
 Exit codes (frozen):
@@ -156,13 +158,15 @@ Exit codes (frozen):
 
 ### Invoke-BallastMigrations
 
-`Invoke-BallastMigrations -Config <config> -App <name> [-RepoPath <path>] [-BundlePath <file>] [-WhatIf] [-Yes]`
+`Invoke-BallastMigrations -Config <config> -App <name> [-RepoPath <path>] [-BundlePath <file>] [-Ref <ref>] [-Database <name>] [-WhatIf] [-Yes]`
 
-Applies one app's pending migrations. Steps, in order: `dotnet tool restore`; the connection string; the database check, the collation check (when `RequireCaseInsensitiveCollation` is true), and the temporary firewall rule (when `SqlServer` is set); the pending list from `dotnet ef migrations list --json`; the guard; a summary; the prompt; the bundle; a post-check that nothing is pending. Every step after the list is skipped when nothing is pending.
+Applies one app's pending migrations. Steps, in order: the .NET SDK and dotnet-ef preflight, which runs `dotnet tool restore`; with no `-BundlePath`, a clean worktree of `-Ref`; the connection string (with `-Database`, only its catalog changes); the database check, the collation check (when `RequireCaseInsensitiveCollation` is true), and the temporary firewall rule (when `SqlServer` is set); the pending list from `dotnet ef migrations list --json`; the guard; a summary; the prompt; the bundle (built after the prompt from the worktree when `-BundlePath` is not given); a post-check that nothing is pending. The `ThrowawayDirectories` folders exist from the first EF command until the run ends. Every step after the list is skipped when nothing is pending.
 
 | Parameter | Meaning |
 |---|---|
-| `-BundlePath` | The EF bundle to run. Build it with `dotnet ef migrations bundle`. Required to apply; not needed with `-WhatIf` or when nothing is pending. |
+| `-BundlePath` | The EF bundle to run. Build it with `dotnet ef migrations bundle`. Left out, the bundle is built after the prompt from a clean worktree of `-Ref`, with the same guard and prompt. Not needed with `-WhatIf` or when nothing is pending. |
+| `-Ref` | `HEAD` | The commit whose migrations are applied when `-BundlePath` is not given. Its clean worktree is the code that the list, the guard and the bundle read. The commit must be in the local clone; it need not be on `origin`. |
+| `-Database` | | A rehearsal: the database to use on the same server instead of the catalog in the connection string. Only the catalog changes. Refused when it names the app's own database (case-insensitive), or when it is not a database name. |
 | `-WhatIf` | Stops after the summary. Opens and closes the firewall rule, because reading the list has to connect. |
 | `-Yes` | Skips the y/N prompt only. The guard checks still run. |
 
@@ -244,6 +248,9 @@ The guard's own tests decide what a marker means. The module only reads the mark
 | `dotnet publish`, the EF bundle, or the zip fails | Exit 1. Nothing has changed in Azure. |
 | The database does not exist, or the connection string names another server | Exit 1, before the firewall rule. |
 | The database's collation is case-sensitive while `RequireCaseInsensitiveCollation` is true, or cannot be read | Exit 1, before the firewall rule. |
+| The .NET SDK is below `MinimumSdkMajor`, or dotnet-ef is not the version `.config/dotnet-tools.json` pins | Exit 1, before any Azure call. |
+| `-Database` names the app's own database (in any case), or is not a database name | Exit 1, before the firewall rule. |
+| A run fails after its `ThrowawayDirectories` folder is made | The folder is deleted in the same run. A folder that cannot be deleted is a warning with its path. |
 | The migration list cannot be read | Refused connections are retried (`ListRetries`), then exit 1. Other errors exit 1 at once. |
 | The guard fails, or is unavailable under `-Yes` | Exit 1. Nothing is applied. |
 | All migrations are pending under `-Yes` | Exit 1. Nothing is applied. This looks like an empty or wrong database. |

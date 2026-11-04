@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The API that the TestApiFactory tests boot. It is an executable with one entry point, so WebApplicationFactory can find it.
+    It lives outside tests/, because tests/Directory.Build.props makes every project there a test project with a generated
+    entry point, which would clash with this one.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+</Project>

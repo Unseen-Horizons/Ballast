@@ -45,6 +45,7 @@
     <Project Path="tests/Ballast.Maui.Tests/Ballast.Maui.Tests.csproj" />
     <Project Path="tests/Ballast.Auth.Tests/Ballast.Auth.Tests.csproj" />
     <Project Path="tests/Ballast.Testing.Tests/Ballast.Testing.Tests.csproj" />
+    <Project Path="hosts/Ballast.Testing.Tests.Host/Ballast.Testing.Tests.Host.csproj" />
     <Project Path="tests/Ballast.Build.Tests/Ballast.Build.Tests.csproj" />
   </Folder>
 </Solution>

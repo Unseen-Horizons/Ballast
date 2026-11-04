@@ -26,10 +26,11 @@ $script:OptionDefaults = @{
     TagDateFormat         = 'yyyy-MM-dd'
     RuntimeIdentifier     = 'linux-x64'
     ListRetries           = 6
+    MinimumSdkMajor       = 8
     ListRetryDelaySeconds = 20
 }
 $script:AppFields = @('Subscription', 'ResourceGroup', 'WebApp', 'HealthUrl', 'Project', 'LegacyBuildTimeProperty', 'Migrations', 'RequireCaseInsensitiveCollation')
-$script:MigrationFields = @('DbContext', 'ConnectionSetting', 'SqlServer', 'Guard', 'Environment', 'ThrowawayVariables')
+$script:MigrationFields = @('DbContext', 'ConnectionSetting', 'SqlServer', 'Guard', 'Environment', 'ThrowawayVariables', 'ThrowawayDirectories')
 $script:TagDateFormats = @('yyyyMMdd', 'yyyy-MM-dd')
 
 $script:SecretPatterns = $script:DefaultSecretPatterns
@@ -332,6 +333,7 @@ function Resolve-BallastConfig {
     $options.TagPushDelaySeconds = Get-BallastIntOption -Name 'TagPushDelaySeconds' -Value $options.TagPushDelaySeconds -Minimum 0
     $options.ListRetries = Get-BallastIntOption -Name 'ListRetries' -Value $options.ListRetries -Minimum 0
     $options.ListRetryDelaySeconds = Get-BallastIntOption -Name 'ListRetryDelaySeconds' -Value $options.ListRetryDelaySeconds -Minimum 0
+    $options.MinimumSdkMajor = Get-BallastIntOption -Name 'MinimumSdkMajor' -Value $options.MinimumSdkMajor -Minimum 1
     if ($script:TagDateFormats -cnotcontains [string]$options.TagDateFormat) {
         throw "TagDateFormat must be one of: $($script:TagDateFormats -join ', ')."
     }
@@ -455,13 +457,25 @@ function Resolve-BallastMigrationsConfig {
         }
     }
 
+    $directories = @{}
+    if ($null -ne $Value['ThrowawayDirectories']) {
+        if ($Value['ThrowawayDirectories'] -isnot [hashtable]) { throw "App '$Name' Migrations ThrowawayDirectories must be a hashtable of variable name to marker file name." }
+        foreach ($variable in $Value['ThrowawayDirectories'].Keys) {
+            $variableName = [string]$variable
+            $marker = [string]$Value['ThrowawayDirectories'][$variable]
+            if ($variableName -cnotmatch '^[A-Za-z_][A-Za-z0-9_:.-]*$') { throw "App '$Name' Migrations ThrowawayDirectories name '$variableName' is not a variable name." }
+            if ($marker -cnotmatch '^\.?[A-Za-z0-9][A-Za-z0-9._-]{0,99}$') { throw "App '$Name' Migrations ThrowawayDirectories marker '$marker' must be a plain file name, such as .marker-file." }
+            $directories[$variableName] = $marker
+        }
+    }
     return @{
-        DbContext          = $context
-        ConnectionSetting  = $connection
-        SqlServer          = $sqlServer
-        Guard              = $guard
-        Environment        = $childEnvironment
-        ThrowawayVariables = @($throwaway)
+        DbContext            = $context
+        ConnectionSetting   = $connection
+        SqlServer           = $sqlServer
+        Guard               = $guard
+        Environment         = $childEnvironment
+        ThrowawayVariables  = @($throwaway)
+        ThrowawayDirectories = $directories
     }
 }
 
@@ -716,14 +730,20 @@ function Invoke-BallastPublish {
 
 # The EF bundle that applies this commit's migrations. Built from the worktree, so it matches the code being deployed.
 function New-BallastMigrationBundle {
-    param([Parameter(Mandatory)][string]$WorktreeDir, [Parameter(Mandatory)][string]$Project, [Parameter(Mandatory)][string]$Context, [Parameter(Mandatory)][string]$OutDir)
+    param(
+        [Parameter(Mandatory)][string]$WorktreeDir,
+        [Parameter(Mandatory)][string]$Project,
+        [Parameter(Mandatory)][string]$Context,
+        [Parameter(Mandatory)][string]$OutDir,
+        [hashtable]$Environment = @{}
+    )
 
     $null = New-Item -ItemType Directory -Force -Path $OutDir
     $exe = 'efbundle'
     if ($IsWindows) { $exe = 'efbundle.exe' }
     $path = Join-Path $OutDir $exe
     $projectPath = Join-Path $WorktreeDir $Project
-    $run = Invoke-BallastProcess -FilePath 'dotnet' -WorkingDirectory $WorktreeDir -Arguments @(
+    $run = Invoke-BallastProcess -FilePath 'dotnet' -WorkingDirectory $WorktreeDir -Environment $Environment -Arguments @(
         'ef', 'migrations', 'bundle', '--project', $projectPath, '--startup-project', $projectPath, '--context', $Context,
         '--configuration', 'Release', '--force', '--output', $path
     )
@@ -946,6 +966,104 @@ function New-BallastDeployTag {
 
 # --- Migrations -------------------------------------------------------------------------------------------------------
 
+# The .NET SDK and the dotnet-ef in use, read before anything runs. The SDK's major version must be at least the config's
+# MinimumSdkMajor. After `dotnet tool restore`, the dotnet-ef in use must be the version .config/dotnet-tools.json pins.
+function Test-BallastDotnetPreflight {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$RepoPath, [Parameter(Mandatory)][int]$MinimumSdkMajor)
+
+    Write-BallastStep 'Preflight: .NET SDK and dotnet-ef'
+    $version = Invoke-BallastProcess -FilePath 'dotnet' -Arguments @('--version') -WorkingDirectory $RepoPath
+    $sdk = [string](@($version.Output | ForEach-Object { [string]$_ } | Where-Object { $_ -match '^\s*\d+\.' }) | Select-Object -First 1)
+    if ($version.ExitCode -ne 0 -or $sdk -notmatch '^\s*\d+\.') {
+        throw "Could not read the .NET SDK version (exit $($version.ExitCode)).`n$(Get-BallastTail -Lines $version.Output)"
+    }
+    $null = $sdk -match '^\s*(\d+)\.'
+    if ([int]$Matches[1] -lt $MinimumSdkMajor) {
+        throw "dotnet $MinimumSdkMajor or later is required (the config's MinimumSdkMajor). Found: $($sdk.Trim())."
+    }
+    Write-BallastNote "dotnet $($sdk.Trim())"
+
+    $restore = Invoke-BallastProcess -FilePath 'dotnet' -Arguments @('tool', 'restore') -WorkingDirectory $RepoPath
+    if ($restore.ExitCode -ne 0) { throw "dotnet tool restore failed (exit $($restore.ExitCode)).`n$(Get-BallastTail -Lines $restore.Output)" }
+
+    $manifestPath = Join-Path $RepoPath '.config/dotnet-tools.json'
+    if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) {
+        throw "There is no .config/dotnet-tools.json in $RepoPath, so the dotnet-ef version cannot be checked."
+    }
+    $manifest = Get-Content -Raw -LiteralPath $manifestPath | ConvertFrom-Json
+    $pinned = [string]$manifest.tools.'dotnet-ef'.version
+    if (-not $pinned) { throw '.config/dotnet-tools.json does not pin dotnet-ef.' }
+
+    $ef = Invoke-BallastProcess -FilePath 'dotnet' -Arguments @('ef', '--version') -WorkingDirectory $RepoPath
+    $installed = ''
+    foreach ($line in @($ef.Output | ForEach-Object { [string]$_ })) {
+        if ($line -match '(\d+\.\d+\.\d+)') { $installed = $Matches[1] }
+    }
+    if ($ef.ExitCode -ne 0 -or -not $installed) { throw "Could not read the dotnet-ef version (exit $($ef.ExitCode)).`n$(Get-BallastTail -Lines $ef.Output)" }
+    if ($installed -ne $pinned) { throw "dotnet-ef $installed runs here, but .config/dotnet-tools.json pins $pinned. Run: dotnet tool restore" }
+    Write-BallastNote "dotnet-ef $installed (matches the manifest)"
+}
+
+# The connection string of an app's migrations, read from the web app. It is never printed, and it is registered as a secret.
+function Get-BallastMigrationConnection {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][hashtable]$Migrations, [Parameter(Mandatory)][string]$ResourceGroup, [Parameter(Mandatory)][string]$WebApp)
+
+    Write-BallastStep "Reading the connection string of $WebApp (not printed)"
+    $settings = Get-BallastAppSettings -ResourceGroup $ResourceGroup -WebApp $WebApp
+    if (-not $settings.ContainsKey($Migrations.ConnectionSetting)) { throw "$WebApp has no $($Migrations.ConnectionSetting) app setting." }
+    $connRaw = [string]$settings[$Migrations.ConnectionSetting]
+    if (-not $connRaw.Trim()) { throw "$WebApp's $($Migrations.ConnectionSetting) setting is empty." }
+    if ($connRaw -like '@Microsoft.KeyVault*') {
+        throw "$WebApp's connection string is a Key Vault reference. This needs the literal string, and will not guess."
+    }
+    Register-BallastSecret -Value $connRaw
+    return $connRaw
+}
+
+# The environment of the EF commands and the bundle for one run: the app's Environment, the connection string, a fresh
+# throwaway value for each ThrowawayVariables name, and a fresh folder holding each ThrowawayDirectories marker. Every folder
+# made is added to Scratch, so the caller removes it whatever happens.
+function New-BallastMigrationEnvironment {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory)][hashtable]$Migrations,
+        [Parameter(Mandatory)][string]$ConnectionString,
+        [System.Collections.ArrayList]$Scratch
+    )
+
+    $childEnv = @{}
+    foreach ($name in $Migrations.Environment.Keys) { $childEnv[$name] = [string]$Migrations.Environment[$name] }
+    $childEnv[$Migrations.ConnectionSetting] = $ConnectionString
+    foreach ($name in $Migrations.ThrowawayVariables) {
+        $key = New-BallastSigningKey
+        Register-BallastSecret -Value $key
+        $childEnv[$name] = $key
+    }
+    foreach ($name in $Migrations.ThrowawayDirectories.Keys) {
+        $folder = Join-Path ([System.IO.Path]::GetTempPath()) ('ballast-throwaway-' + [guid]::NewGuid().ToString('N'))
+        $null = New-Item -ItemType Directory -Path $folder
+        $null = $Scratch.Add($folder)
+        $null = New-Item -ItemType File -Path (Join-Path $folder ([string]$Migrations.ThrowawayDirectories[$name]))
+        $childEnv[[string]$name] = $folder
+    }
+    return $childEnv
+}
+
+# Deletes the temporary folders and files a run made. A folder that cannot be deleted is a warning with its path, never a
+# change to the run's result.
+function Remove-BallastScratch {
+    [CmdletBinding()]
+    param([AllowNull()][System.Collections.IEnumerable]$Paths)
+
+    foreach ($path in @($Paths)) {
+        if (-not $path -or -not (Test-Path -LiteralPath $path)) { continue }
+        try { Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction Stop }
+        catch { Write-BallastWarning "Could not delete the temporary folder $path ($($_.Exception.Message)). Delete it by hand." }
+    }
+}
+
 # The JSON array in `dotnet ef migrations list --json`, which may have warnings around it. Returns $null when there is no
 # array. Entries: each has id and applied (true, false, or null when EF could not connect).
 function ConvertFrom-BallastMigrationListing {
@@ -1113,7 +1231,8 @@ function Invoke-BallastMigrationPlan {
         [string]$BundlePath,
         [switch]$WhatIf,
         [switch]$Yes,
-        [Parameter(Mandatory)][hashtable]$State
+        [Parameter(Mandatory)][hashtable]$State,
+        [string]$Database
     )
 
     $mig = $AppConfig.Migrations
@@ -1121,32 +1240,26 @@ function Invoke-BallastMigrationPlan {
     $webApp = $AppConfig.WebApp
     $group = $AppConfig.ResourceGroup
 
-    $tool = Invoke-BallastProcess -FilePath 'dotnet' -Arguments @('tool', 'restore') -WorkingDirectory $RepoPath
-    if ($tool.ExitCode -ne 0) { throw "dotnet tool restore failed (exit $($tool.ExitCode)).`n$(Get-BallastTail -Lines $tool.Output)" }
 
     $projectPath = Join-Path $RepoPath $AppConfig.Project
     if (-not (Test-Path -LiteralPath $projectPath -PathType Leaf)) { throw "The project $($AppConfig.Project) is not in $RepoPath." }
 
-    Write-BallastStep "Reading the connection string of $webApp (not printed)"
-    $settings = Get-BallastAppSettings -ResourceGroup $group -WebApp $webApp
-    if (-not $settings.ContainsKey($mig.ConnectionSetting)) { throw "$webApp has no $($mig.ConnectionSetting) app setting." }
-    $connRaw = [string]$settings[$mig.ConnectionSetting]
-    if (-not $connRaw.Trim()) { throw "$webApp's $($mig.ConnectionSetting) setting is empty." }
-    if ($connRaw -like '@Microsoft.KeyVault*') {
-        throw "$webApp's connection string is a Key Vault reference. This needs the literal string, and will not guess."
-    }
-    Register-BallastSecret -Value $connRaw
+    $connRaw = Get-BallastMigrationConnection -Migrations $mig -ResourceGroup $group -WebApp $webApp
     $info = Read-BallastConnectionString -ConnectionString $connRaw
     Register-BallastSecret -Value $info.Password
 
-    $childEnv = @{}
-    foreach ($name in $mig.Environment.Keys) { $childEnv[$name] = [string]$mig.Environment[$name] }
-    $childEnv[$mig.ConnectionSetting] = $connRaw
-    foreach ($name in $mig.ThrowawayVariables) {
-        $key = New-BallastSigningKey
-        Register-BallastSecret -Value $key
-        $childEnv[$name] = $key
+    if ($Database) {
+        if ($Database -cnotmatch '^[A-Za-z0-9_.-]{1,128}$') { throw "The rehearsal database name '$Database' is not a database name. Refusing." }
+        if ($Database -ieq $info.Catalog) {
+            throw "-Database names $($info.Catalog), the app's own database. A rehearsal needs another database on the same server, so nothing is migrated here. Refusing."
+        }
+        $connRaw = [regex]::Replace($connRaw, '(?i)((?:initial catalog|database)=)[^;]*', ('${1}' + $Database))
+        $info = Read-BallastConnectionString -ConnectionString $connRaw
+        if ($info.Catalog -cne $Database) { throw "The rehearsal database name could not be set in the connection string. Refusing." }
+        Write-BallastNote "rehearsal: $Database on the same server, instead of the app's own database"
     }
+
+    $childEnv = New-BallastMigrationEnvironment -Migrations $mig -ConnectionString $connRaw -Scratch $State.Scratch
 
     if ($mig.SqlServer) {
         if (($info.Server -split '\.')[0] -ine $mig.SqlServer) {
@@ -1262,8 +1375,8 @@ function Invoke-BallastMigrationPlan {
         }
     }
 
-    if (-not $BundlePath -or -not (Test-Path -LiteralPath $BundlePath -PathType Leaf)) {
-        throw "No migration bundle at '$BundlePath'. Build it with dotnet ef migrations bundle, then pass its path."
+    if ($BundlePath -and -not (Test-Path -LiteralPath $BundlePath -PathType Leaf)) {
+        throw "No migration bundle at '$BundlePath'. Pass a bundle built with dotnet ef migrations bundle, or leave -BundlePath out to build it from the commit."
     }
 
     if (-not $Yes) {
@@ -1271,6 +1384,13 @@ function Invoke-BallastMigrationPlan {
             Write-BallastStep 'Declined. Nothing was applied.'
             return @{ Result = 'declined'; Code = 2; Message = 'Declined. Nothing was applied.' }
         }
+    }
+
+    if (-not $BundlePath) {
+        Write-BallastStep "Building the migration bundle for $($mig.DbContext) from the commit"
+        $bundleDir = Join-Path ([System.IO.Path]::GetTempPath()) ('ballast-bundle-' + [guid]::NewGuid().ToString('N'))
+        $null = $State.Scratch.Add($bundleDir)
+        $BundlePath = New-BallastMigrationBundle -WorktreeDir $RepoPath -Project $AppConfig.Project -Context $mig.DbContext -OutDir $bundleDir -Environment $childEnv
     }
 
     Write-BallastStep "Applying $($pending.Count) migration(s) to $($info.Catalog)"
@@ -1316,11 +1436,13 @@ function Invoke-BallastMigrations {
         [Parameter(Mandatory)][string]$App,
         [string]$RepoPath = '.',
         [string]$BundlePath,
+        [string]$Ref = 'HEAD',
+        [string]$Database,
         [switch]$WhatIf,
         [switch]$Yes
     )
 
-    $state = @{ Rule = $null; Server = $null; ResourceGroup = $null; Ip = $null; Pending = 0; PreviousSubscription = $null }
+    $state = @{ Rule = $null; Server = $null; ResourceGroup = $null; Ip = $null; Pending = 0; PreviousSubscription = $null; Worktree = $null; Scratch = [System.Collections.ArrayList]::new() }
     $outcome = @{ Result = 'failed'; Code = 1; Message = '' }
     $repo = $RepoPath
     try {
@@ -1328,8 +1450,23 @@ function Invoke-BallastMigrations {
         $script:SecretPatterns = @($cfg.Options.SecretPatterns)
         $repo = (Resolve-Path -LiteralPath $RepoPath).Path
         $appConfig = Get-BallastAppConfig -Config $cfg -App $App
+        if ($null -eq $appConfig.Migrations) { throw "$App has no Migrations section in the config, so there is nothing to migrate." }
+
+        # Without -BundlePath the migrations are those of one commit, and the code they run from is a clean worktree of it.
+        $planRepo = $repo
+        if (-not $BundlePath) {
+            $resolved = Invoke-Git -RepoPath $repo -Arguments @('rev-parse', '--verify', "$Ref^{commit}") -AllowFailure
+            $sha = ''
+            if ($resolved.ExitCode -eq 0) { $sha = ([string](@($resolved.Output | ForEach-Object { [string]$_ }) | Select-Object -First 1)).Trim() }
+            if ($sha -cnotmatch '^[0-9a-f]{40}$') { throw "-Ref '$Ref' is not a commit in this clone, so its migrations cannot be read." }
+            $state.Worktree = Join-Path ([System.IO.Path]::GetTempPath()) ('ballast-migrations-' + [guid]::NewGuid().ToString('N'))
+            $planRepo = New-BallastBuildWorktree -Sha $sha -Root $state.Worktree -RepoPath $repo
+            Write-BallastNote "migrations of $($sha.Substring(0, 8)), run from a clean worktree of that commit"
+        }
+
+        Test-BallastDotnetPreflight -RepoPath $planRepo -MinimumSdkMajor ([int]$cfg.Options.MinimumSdkMajor)
         $state.PreviousSubscription = Use-BallastSubscription -Subscription $appConfig.Subscription
-        $outcome = Invoke-BallastMigrationPlan -Config $cfg -App $App -AppConfig $appConfig -RepoPath $repo -BundlePath $BundlePath -WhatIf:$WhatIf -Yes:$Yes -State $state
+        $outcome = Invoke-BallastMigrationPlan -Config $cfg -App $App -AppConfig $appConfig -RepoPath $planRepo -BundlePath $BundlePath -WhatIf:$WhatIf -Yes:$Yes -State $state -Database $Database
     }
     catch {
         $text = Hide-BallastSecret -Text $_.Exception.Message
@@ -1338,6 +1475,8 @@ function Invoke-BallastMigrations {
     }
     finally {
         if ($state.Rule) { Remove-BallastFirewallRule -ResourceGroup $state.ResourceGroup -Server $state.Server -Name $state.Rule }
+        if ($state.Worktree) { Remove-BallastBuildWorktree -Root $state.Worktree -RepoPath $repo }
+        Remove-BallastScratch -Paths $state.Scratch
         Restore-BallastSubscription -Id $state.PreviousSubscription
     }
 
@@ -1413,6 +1552,10 @@ function Invoke-BallastDeploy {
             Stop-BallastRun 1 'git has no committer identity in this repository. Set user.name and user.email for it, then deploy again. This module never sets git config.'
         }
 
+        if (@($App | Where-Object { $null -ne $cfg.Apps[$_].Migrations }).Count -gt 0) {
+            Test-BallastDotnetPreflight -RepoPath $repo -MinimumSdkMajor ([int]$cfg.Options.MinimumSdkMajor)
+        }
+
         $liveByApp = @{}
         foreach ($key in $App) {
             $appConfig = $cfg.Apps[$key]
@@ -1486,8 +1629,15 @@ function Invoke-BallastDeploy {
             $null = New-BallastDeploymentZip -SourceDir $outDir -ZipPath "$outDir.zip"
             $zips[$key] = "$outDir.zip"
             if ($null -ne $appConfig.Migrations -and -not $WhatIf) {
-                $bundles[$key] = New-BallastMigrationBundle -WorktreeDir $worktree -Project $appConfig.Project `
-                    -Context $appConfig.Migrations.DbContext -OutDir (Join-Path $tempRoot ("bundle/" + $key))
+                $null = Use-BallastSubscription -Subscription $appConfig.Subscription
+                $connRaw = Get-BallastMigrationConnection -Migrations $appConfig.Migrations -ResourceGroup $appConfig.ResourceGroup -WebApp $appConfig.WebApp
+                $scratch = [System.Collections.ArrayList]::new()
+                try {
+                    $bundleEnv = New-BallastMigrationEnvironment -Migrations $appConfig.Migrations -ConnectionString $connRaw -Scratch $scratch
+                    $bundles[$key] = New-BallastMigrationBundle -WorktreeDir $worktree -Project $appConfig.Project `
+                        -Context $appConfig.Migrations.DbContext -OutDir (Join-Path $tempRoot ("bundle/" + $key)) -Environment $bundleEnv
+                }
+                finally { Remove-BallastScratch -Paths $scratch }
             }
         }
 
