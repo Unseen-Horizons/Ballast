@@ -44,6 +44,7 @@ Bound with `ReadJwt` from the section named by `JwtSection`, then checked by `Va
 | `SecurityStampRequired` | `false` | When `true`, a token without a security stamp claim is refused. |
 | `LegacyBcryptPasswords` | `false` | When `true`, a password hashed by the old BCrypt format is accepted and rehashed at the next sign-in. |
 | `PasswordSignIn` | `All` | Who may sign in with a password: `Off` (nobody, refused before any lookup), `OwnerOnly` (only accounts in `PrivilegedRoleName`), or `All` (every active account that has a password). Microsoft and Google sign-in are not affected. |
+| `PasswordSignInBy` | `Email` | The identifier a password sign-in takes: `Email` (the address) or `UserName`. The lookup, the lockout and the hashing time are the same in either mode, and an unknown identifier gets the same answer as a wrong password. Any other value is refused at start. |
 | `PrivilegedRoleName` | null | The role that `OwnerOnly` admits. |
 | `NewAccountRole` | null | The role a new account gets from a sign-up. Null gives none. |
 | `Claims` | `AuthClaimNames` | The claim names the tokens use (below). |
@@ -97,6 +98,7 @@ Each refusal is an `AuthFailure` with a code, a status and a message. The librar
 | `USER_NOT_FOUND` | 404 | A signed-in request or admin action names an account that does not exist. |
 | `MICROSOFT_ACCOUNT` | 409 | An action a Microsoft account cannot take, such as a password change or a Google link. |
 | `NO_PASSWORD_SET` | 409 | A password change on an account with no password. |
+| `NO_PASSWORD_ACCOUNT` | 422 | An admin password reset on an account with no password. Set its first password instead. |
 | `PASSWORD_ALREADY_SET` | 409 | A first password set on an account that has one. |
 | `EMAIL_LINK_INVALID` | 401 | A link that is unknown, used, expired, or for another purpose. |
 | `RATE_LIMITED` | 429 | More links were requested in the window than `MaxIssuedPerWindow` allows. |
@@ -113,6 +115,24 @@ Each refusal is an `AuthFailure` with a code, a status and a message. The librar
 
 The Microsoft handshake refusals are not `AuthFailure`s. They are the `error` query of a redirect to the sign-in page,
 listed under "Microsoft staff sign-in" below.
+
+## Admin password reset
+
+`AuthAccountService.ResetPasswordAsync(userId, newPassword, ct)` sets a new password for an account, for an administrator,
+without the account's current one. The library does not check who calls it: the app decides who may, and checks its own
+permission first.
+
+- The new password meets the same rules as any other, through Identity's own validators (`AuthPasswordRules`). A password
+  that breaks one is refused with `UNCLASSIFIED`, with Identity's words, and the old password still works.
+- The hash is replaced, the security stamp changes, and every refresh token of the account is revoked. An access token
+  issued before the reset carries the old stamp, so the access check (`AuthAccessCheck`) refuses it.
+- It is audited as `PasswordReset` on the account. The audit row has no field for the administrator who acted, so an app
+  that needs that records it in its own audit.
+- It refuses with `USER_NOT_FOUND` (404), `MICROSOFT_ACCOUNT` (409) and `NO_PASSWORD_ACCOUNT` (422), listed above.
+- It does not lift a lockout. An account locked by failed sign-ins stays locked until the lockout ends.
+- The hash, the stamp and the revoke are saved one after another, not in one transaction, as `ChangePasswordAsync` saves
+  its steps. The password is replaced first. If a later step fails, the new password stays, and the old sessions may still
+  be live until a second reset ends them.
 
 ## Accounts outside Identity
 
@@ -240,6 +260,23 @@ default names none.
 - A Microsoft sign-in never links one of those accounts to a Microsoft login, and never changes it. A sign-in whose
   Microsoft login is already on one is refused with `MS_EMERGENCY_ACCOUNT`.
 
+### Staff profile hook
+
+An app that keeps its own row for each staff member, or that sets the account's key itself, implements
+`IMicrosoftStaffProfile<TUser, TKey>` and registers it. Either order against `AddBallastMicrosoftSignIn` works, and the app's
+registration is used. The default keeps nothing, so each call does nothing.
+
+| Call | When it runs | If it throws |
+|---|---|---|
+| `CreatingAsync(user, person, ct)` | Before a new account is inserted, in the transaction that inserts it. The app may write its own row here, and set `user.Id` from it, so the account and the row share one key. A key the database generates is copied from the row after its save. | The account is not written, its role is undone, and the sign-in fails with `MicrosoftStaffProfileException`, whose inner exception is the app's. |
+| `AppliedAsync(user, person, ct)` | After a name, address or role change of a linked account, in the transaction that makes it. A sign-in and the directory sync both call it. It does not run when only the switch-on changed. | The change is undone. A sign-in fails with `MicrosoftStaffProfileException`. The sync lists `PROFILE_HOOK_FAILED` for that person and goes on. |
+| `SwitchedOffAsync(user, ct)` | After the directory sync switches an account off, in the transaction that switches it off. | The switch-off is undone for that person. The sync lists `PROFILE_HOOK_FAILED` and goes on. |
+
+- A sync problem `PROFILE_HOOK_FAILED` has the person's address as its subject (the account's key for a switch-off), and the
+  type of the app's exception as its detail, never its message.
+- A key the app sets in `CreatingAsync` is kept as it is. The app's mapping must then say that the database does not
+  generate that key.
+
 ### Options (MicrosoftSignInOptions)
 
 | Property | Config key | Default | Meaning |
@@ -308,6 +345,9 @@ A one-time code that fails at the exchange is `SIGNIN_CODE_INVALID`, a status 40
 | `Applied` | The changes were written in one transaction. | Everything in the plan. |
 | `WriteFailed` | A write failed. The transaction was rolled back. | Nothing. |
 
+A staff profile hook that throws undoes only that person's change, lists `PROFILE_HOOK_FAILED` for them, and the run goes on
+to the rest. Such a run is still `Applied`. See "Staff profile hook" above.
+
 **The job holder.** The sync needs `IJobLeadership` from Ballast.Jobs, so only the copy that holds the job lock writes.
 Schedule it with the job host (`AddLeaderHostedService` in Ballast.Jobs, see [Jobs.md](Jobs.md)), every `SyncMinutes`.
 The library never schedules it itself. The app must register the job lock before it resolves the sync.
@@ -351,7 +391,12 @@ locks the account until a later sync switches it on, and ends its sessions.
 
 - The library's tests cover the one-time code race, the recheck at the exchange, code expiry, the address-taken and
   domain refusals, the looks-wrong stop, a sync that cannot read, the prefix rule, the domain check, the emergency
-  account, single-role mode, retired roles, the e-mail link recheck and the subject key.
+  account, single-role mode, retired roles, the e-mail link recheck and the subject key. They also cover the two
+  `PasswordSignInBy` modes, the admin password reset, and the staff profile hook: its three calls, the create rollback,
+  the per-person rollback in a sync, and a key the app sets.
+- The reset's audit row names no administrator, and a reset does not lift a lockout.
+- `MicrosoftSignInService` and `MicrosoftDirectorySync` take the profile hook as a new constructor parameter. An app that
+  builds them by hand, rather than from dependency injection, must pass it.
 - They do not run the HTTP routes end to end, and they do not test the Graph client's paging or throttling against a
   live or fake HTTP server. Those are reviewed, not yet tested.
 - `IssuedSession` is the exchange's body. An app's `LoginResponse` may also carry a `user` object, so an app that keeps that body calls `ExchangeAsync` from its own endpoint.

@@ -39,6 +39,12 @@ public sealed class AuthFailures
     public AuthFailure PasswordAlreadySet { get; set; } = new("PASSWORD_ALREADY_SET", 409, "This account already has a password.");
 
     /// <summary>
+    /// An admin's password reset on an account that has no password, such as one made by Google or Microsoft sign-in. The reset does not set a
+    /// first password on such an account; the person signs in another way.
+    /// </summary>
+    public AuthFailure NoPasswordAccount { get; set; } = new("NO_PASSWORD_ACCOUNT", 422, "This account has no password, so it cannot be reset.");
+
+    /// <summary>
     /// A sign-in link that is unknown, already used, expired, or for another purpose. One answer for all of them, so a link cannot be
     /// probed.
     /// </summary>

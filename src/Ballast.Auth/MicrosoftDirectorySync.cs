@@ -7,6 +7,7 @@ using Ballast.SqlServer;
 
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.Logging;
 
 namespace Ballast.Auth;
@@ -56,7 +57,8 @@ public sealed record MicrosoftSyncResult(
 /// <para>
 /// A run reads everything first. Then the plan (<see cref="MicrosoftSyncPlan"/>) is decided. If the plan would switch off every linked account
 /// while some were on (a wrong tenant or an empty assignment list, for example), the run stops and writes nothing. Otherwise its changes are
-/// written in one transaction. A failed read or write changes nothing.
+/// written in one transaction, each person's change under its own savepoint. A failed read or write changes nothing. A profile hook
+/// (<see cref="IMicrosoftStaffProfile{TUser,TKey}"/>) that throws undoes only that person's change, and that person is listed.
 /// </para>
 /// </summary>
 /// <typeparam name="TUser">The app's Identity user.</typeparam>
@@ -94,6 +96,7 @@ public sealed class MicrosoftDirectorySync<TUser, TKey, TRole, TRefresh, TContex
     /// <param name="sessions">The session service, which ends the sessions of a changed or switched-off account.</param>
     /// <param name="audit">Where the audit rows go.</param>
     /// <param name="emergency">The app's emergency accounts. A run leaves them out: never switched off, never applied to.</param>
+    /// <param name="profile">The app's own profile of a staff member. A hook that throws undoes only that person's change, and the person is listed.</param>
     /// <param name="time">The clock.</param>
     /// <param name="logger">Logs the run. Messages name no token and no secret.</param>
     public MicrosoftDirectorySync(
@@ -106,6 +109,7 @@ public sealed class MicrosoftDirectorySync<TUser, TKey, TRole, TRefresh, TContex
         AuthSessionService<TUser, TKey, TRefresh, TContext> sessions,
         IAuthAudit audit,
         IMicrosoftEmergencyAccounts<TKey> emergency,
+        IMicrosoftStaffProfile<TUser, TKey> profile,
         TimeProvider time,
         ILogger<MicrosoftDirectorySync<TUser, TKey, TRole, TRefresh, TContext>> logger)
     {
@@ -115,7 +119,7 @@ public sealed class MicrosoftDirectorySync<TUser, TKey, TRole, TRefresh, TContex
         _db = db;
         _users = users;
         _roles = roles;
-        _staff = new MicrosoftStaffAccounts<TUser, TKey, TRole, TRefresh, TContext>(users, roles, sessions, audit, time);
+        _staff = new MicrosoftStaffAccounts<TUser, TKey, TRole, TRefresh, TContext>(users, roles, sessions, audit, profile, time);
         _emergency = emergency;
         _time = time;
         _logger = logger;
@@ -178,9 +182,10 @@ public sealed class MicrosoftDirectorySync<TUser, TKey, TRole, TRefresh, TContex
             return new MicrosoftSyncResult(MicrosoftSyncOutcome.NotHolder, null, null, plan.Counts, plan.Problems, secretEnds);
         }
 
+        List<MicrosoftSyncProblem> listed;
         try
         {
-            await WritePlanAsync(plan, emergency, ct);
+            listed = await WritePlanAsync(plan, emergency, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -188,62 +193,113 @@ public sealed class MicrosoftDirectorySync<TUser, TKey, TRole, TRefresh, TContex
             return new MicrosoftSyncResult(MicrosoftSyncOutcome.WriteFailed, DirectorySyncFailure.Unexpected, null, plan.Counts, plan.Problems, secretEnds);
         }
 
-        return new MicrosoftSyncResult(MicrosoftSyncOutcome.Applied, null, null, plan.Counts, plan.Problems, secretEnds);
+        // The people whose profile hook failed are listed with the plan's own problems. Their change was rolled back; the others were applied.
+        return new MicrosoftSyncResult(MicrosoftSyncOutcome.Applied, null, null, plan.Counts, [.. plan.Problems, .. listed], secretEnds);
     }
 
     // The app's emergency accounts, as the text ids the plan and the write step use.
     private async Task<HashSet<string>> EmergencyIdsAsync(CancellationToken ct) =>
         (await _emergency.IdsAsync(ct)).Select(id => AuthKey.Text(id)).ToHashSet(StringComparer.Ordinal);
 
-    // One transaction for the whole plan. The execution strategy replays it whole after a transient fault, from a clean tracker.
-    private async Task WritePlanAsync(MicrosoftSyncPlanResult plan, HashSet<string> emergency, CancellationToken ct)
+    // The savepoint each person's change runs under. A profile hook that throws rolls back to it, and the other people's changes stay.
+    private const string PersonSavepoint = "MicrosoftSyncPerson";
+
+    // The plan's changes, in one transaction. The execution strategy replays it whole after a transient fault, from a clean tracker. A profile hook
+    // that throws undoes only its person's change, back to that person's savepoint, and the person is returned as listed; any other failure rolls
+    // back the whole transaction, so a failed write changes nothing.
+    private async Task<List<MicrosoftSyncProblem>> WritePlanAsync(MicrosoftSyncPlanResult plan, HashSet<string> emergency, CancellationToken ct)
     {
+        List<MicrosoftSyncProblem> listed = [];
         var attempt = 0;
         await _db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
             if (attempt++ > 0)
             {
                 _db.ChangeTracker.Clear();
+                listed.Clear();
             }
 
             await using var transaction = await _db.Database.BeginTransactionAsync(ct);
             try
             {
                 await _staff.EnsureRolesAsync(plan.RolesToCreate);
+                await _db.SaveChangesAsync(ct);
 
                 foreach (var update in plan.Updates)
                 {
-                    var user = await _users.FindByIdAsync(update.UserId);
-
                     // An emergency account is never applied to, even when the plan names it.
-                    if (user is null || emergency.Contains(update.UserId))
+                    if (emergency.Contains(update.UserId))
                     {
                         continue;
                     }
 
-                    await _staff.ApplyAsync(user, update.Person, update.Roles);
+                    var problem = await ChangePersonAsync(
+                        transaction,
+                        update.UserId,
+                        update.Person.Address,
+                        user => _staff.ApplyAsync(user, update.Person, update.Roles, ct),
+                        ct);
+                    if (problem is not null)
+                    {
+                        listed.Add(problem);
+                    }
                 }
 
                 foreach (var userId in plan.SwitchOffUserIds)
                 {
-                    var user = await _users.FindByIdAsync(userId);
-                    if (user is null || emergency.Contains(userId))
+                    if (emergency.Contains(userId))
                     {
                         continue;
                     }
 
-                    await _staff.SwitchOffAsync(user);
+                    var problem = await ChangePersonAsync(transaction, userId, userId, user => _staff.SwitchOffAsync(user, ct), ct);
+                    if (problem is not null)
+                    {
+                        listed.Add(problem);
+                    }
                 }
 
-                await _db.SaveChangesAsync(ct);
                 await transaction.CommitAsync(ct);
             }
             catch
             {
                 await transaction.RollbackAsync(ct);
+                _db.ChangeTracker.Clear();
                 throw;
             }
         });
+
+        return listed;
+    }
+
+    // One person's change, inside the run's transaction and under the person's savepoint. A profile hook that throws is rolled back to the savepoint,
+    // logged, and returned as that person's problem; the run goes on. Any other exception is left to the caller, which rolls back the whole run.
+    private async Task<MicrosoftSyncProblem?> ChangePersonAsync(
+        IDbContextTransaction transaction,
+        string userId,
+        string subject,
+        Func<TUser, Task> change,
+        CancellationToken ct)
+    {
+        await transaction.CreateSavepointAsync(PersonSavepoint, ct);
+        try
+        {
+            var user = await _users.FindByIdAsync(userId);
+            if (user is not null)
+            {
+                await change(user);
+                await _db.SaveChangesAsync(ct);
+            }
+
+            return null;
+        }
+        catch (MicrosoftStaffProfileException ex)
+        {
+            await transaction.RollbackToSavepointAsync(PersonSavepoint, ct);
+            _db.ChangeTracker.Clear();
+            _logger.LogError(ex, "The app's Microsoft staff profile hook failed for {Subject}. That person's change was rolled back; the other changes were kept.", subject);
+            return new MicrosoftSyncProblem(MicrosoftSyncProblems.ProfileHookFailed, subject, ex.InnerException?.GetType().Name);
+        }
     }
 
     private async Task<List<MicrosoftLocalRole>> LocalRolesAsync(CancellationToken ct)

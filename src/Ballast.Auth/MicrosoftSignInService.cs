@@ -83,6 +83,7 @@ public sealed class MicrosoftSignInService<TUser, TKey, TRole, TRefresh, TContex
     /// <param name="sessions">The session service, which issues the session once the account is proven.</param>
     /// <param name="audit">Where the audit rows go.</param>
     /// <param name="emergency">The app's emergency accounts. A sign-in never links one to a Microsoft login, and never changes one.</param>
+    /// <param name="profile">The app's own profile of a staff member. Its hooks run in the sign-in's transaction; a hook that throws rolls the sign-in back.</param>
     /// <param name="time">The clock.</param>
     public MicrosoftSignInService(
         AuthOptions auth,
@@ -93,6 +94,7 @@ public sealed class MicrosoftSignInService<TUser, TKey, TRole, TRefresh, TContex
         AuthSessionService<TUser, TKey, TRefresh, TContext> sessions,
         IAuthAudit audit,
         IMicrosoftEmergencyAccounts<TKey> emergency,
+        IMicrosoftStaffProfile<TUser, TKey> profile,
         TimeProvider time)
     {
         _auth = auth;
@@ -103,7 +105,7 @@ public sealed class MicrosoftSignInService<TUser, TKey, TRole, TRefresh, TContex
         _audit = audit;
         _emergency = emergency;
         _time = time;
-        _staff = new MicrosoftStaffAccounts<TUser, TKey, TRole, TRefresh, TContext>(users, roles, sessions, audit, time);
+        _staff = new MicrosoftStaffAccounts<TUser, TKey, TRole, TRefresh, TContext>(users, roles, sessions, audit, profile, time);
     }
 
     /// <summary>
@@ -320,7 +322,7 @@ public sealed class MicrosoftSignInService<TUser, TKey, TRole, TRefresh, TContex
                 TUser? user;
                 if (linked is null)
                 {
-                    user = await _staff.CreateAsync(person, names);
+                    user = await _staff.CreateAsync(person, names, ct);
                     if (user is null)
                     {
                         await AbandonLostRaceAsync(transaction, ct);
@@ -330,7 +332,7 @@ public sealed class MicrosoftSignInService<TUser, TKey, TRole, TRefresh, TContex
                 else
                 {
                     user = await _users.FindByIdAsync(AuthKey.Text(linked.Id)) ?? linked;
-                    await _staff.ApplyAsync(user, person, names);
+                    await _staff.ApplyAsync(user, person, names, ct);
                 }
 
                 await _db.SaveChangesAsync(ct);
