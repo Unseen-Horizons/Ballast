@@ -41,6 +41,14 @@ public sealed class MicrosoftSignInOptions
     public int SyncMinutes { get; set; } = 15;
 
     /// <summary>
+    /// Whether the directory sync creates an account for each person assigned to the app in Microsoft who has none yet, so they appear before
+    /// their first sign-in. Default false: the sync only updates and switches off, and a first sign-in creates. A created account is made as a
+    /// first sign-in makes it, with the same roles, the profile hook, the Microsoft login and the same refusals. Read from
+    /// <c>SyncCreatesAccounts</c>, true or false.
+    /// </summary>
+    public bool SyncCreatesAccounts { get; set; }
+
+    /// <summary>
     /// The company domains, lower case, such as <c>example.com</c>. When any is set, the sign-in start refuses an address at another domain
     /// (see <see cref="IsCompanyAddress"/>). Empty, the default, allows every address.
     /// </summary>
@@ -137,6 +145,7 @@ public sealed class MicrosoftSignInOptions
             ClientId = Trimmed(values["ClientId"]),
             ClientSecret = Trimmed(values["ClientSecret"]),
             SyncMinutes = MinutesOf(Trimmed(values["SyncMinutes"])),
+            SyncCreatesAccounts = bool.TryParse(Trimmed(values["SyncCreatesAccounts"]), out var creates) && creates,
             AllowedDomains = SemicolonList(values["Domains"]),
         };
 

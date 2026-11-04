@@ -306,6 +306,7 @@ Each member is a constant or a pure check, so reading it has no side effect.
 | `ClientId` | `ClientId` | empty | The Entra application id, a GUID. Empty turns Microsoft sign-in off. |
 | `ClientSecret` | `ClientSecret` | empty | Used by the directory sync only. Empty leaves the sync off. |
 | `SyncMinutes` | `SyncMinutes` | 15 | How often the app runs the sync. At least 5. The library does not schedule it. |
+| `SyncCreatesAccounts` | `SyncCreatesAccounts` | false | When true, the sync creates an account for each assigned person who has none, as a first sign-in does (see "The directory sync"). Read as true or false. |
 | `AllowedDomains` | `Domains` (`;`-separated) | empty | The company domains. When set, an address at another domain is refused. Empty allows every address. |
 | `ConsolePrefix` | none | null | This console's prefix on role values, `Api` or `Map` in the defaults. Null means every value is a role name. Must be one of `ConsolePrefixes` and contain no dot. |
 | `ConsolePrefixes` | none | `Api`, `Map` | The prefixes that name a console. A value with another console's prefix is ignored without a problem. |
@@ -366,6 +367,9 @@ A one-time code that fails at the exchange is `SIGNIN_CODE_INVALID`, a status 40
 | `Applied` | The changes were written in one transaction. | Everything in the plan. |
 | `WriteFailed` | A write failed. The transaction was rolled back. | Nothing. |
 
+`Counts.Created` is the number of accounts the run created. On `Applied` it is the number that committed. On the other outcomes
+that read the directory it is the planned number, which nothing wrote.
+
 A staff profile hook that throws undoes only that person's change, lists `PROFILE_HOOK_FAILED` for them, and the run goes on
 to the rest. Such a run is still `Applied`. See "Staff profile hook" above.
 
@@ -383,7 +387,14 @@ The library never schedules it itself. The app must register the job lock before
 - An address held by another account is listed as `ADDRESS_TAKEN`. The account is updated, but keeps its old address.
 - A role that Microsoft gave and no longer does is listed as `ROLE_NOT_IN_MICROSOFT`. The role is never deleted. The same
   list is on the result as `RolesNotInMicrosoft`, so an admin page can show it without reading the problems.
-- The sync never creates an account. The first sign-in does that.
+- With `SyncCreatesAccounts` off (the default), the sync never creates an account; the first sign-in does that.
+- With it on, an assigned person with no linked account is created as a first sign-in creates one: the same roles, the
+  `CreatingAsync` hook, the Microsoft login, and the same refusals. An address another account holds is listed as
+  `ADDRESS_TAKEN` and never linked by address. An address that is not at `AllowedDomains` is listed as `NOT_COMPANY_ADDRESS`
+  and not created.
+- Each creation runs under the person's own savepoint. A profile hook that throws (`PROFILE_HOOK_FAILED`) or a database
+  write that fails (`CREATE_FAILED`) undoes only that person, and the run goes on. Any other failure during a creation
+  rolls back the whole run (`WriteFailed`).
 - Emergency accounts are left out entirely: not switched off, not applied, not counted in the looks-wrong check.
 
 **Applying a change.** A changed name, address or role ends the account's sessions: the security stamp changes, so the

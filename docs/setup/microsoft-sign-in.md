@@ -119,6 +119,7 @@ environment variables, where a double underscore writes a nested setting.
 | `MicrosoftSignIn:TenantId` | The Directory (tenant) ID | No |
 | `MicrosoftSignIn:ClientId` | The Application (client) ID | No |
 | `MicrosoftSignIn:SyncMinutes` | Optional. 15 by default, 5 at least | No |
+| `MicrosoftSignIn:SyncCreatesAccounts` | Optional. `true` or `false`, `false` by default. When `true`, the sync creates an account for each assigned person who has none (section 7) | No |
 | `MicrosoftSignIn:ClientSecret` | The client secret from step 7 | **Yes** |
 | `MicrosoftSignIn:Domains` | Optional. Company domains, separated by `;`, such as `example.com` | No |
 
@@ -130,8 +131,13 @@ environment variables, where a double underscore writes a nested setting.
 
 The sync reads the staff list in Microsoft on a schedule. It copies each signed-in person's name, address and roles. It
 switches off a person who is blocked, removed, or has no role in that console. It creates the roles that Microsoft gives,
-with no permissions. It never creates an account (that happens at the first sign-in), and it never deletes a role. It
-runs in one copy of the app only, the copy that holds the background-job lock.
+with no permissions. It creates an account for an assigned person who has none only when `SyncCreatesAccounts` is `true`
+(section 6). By default that happens at the first sign-in. It never deletes a role. It runs in one copy of the app only, the
+copy that holds the background-job lock.
+
+With `SyncCreatesAccounts` on, a created account is made as a first sign-in makes it: the same roles, the same profile
+hook, the same Microsoft login, and the same refusals. An address that another account already holds is never linked. The
+sync lists it as `ADDRESS_TAKEN` (section 14), and the account is left as it is.
 
 The sign-in itself does not use the secret. Sign-in keeps working when the sync is off.
 
@@ -206,6 +212,8 @@ code, when there is one, in `ms`. Neither carries Microsoft's message.
 | `SIGNIN_CODE_INVALID` | The one-time code is used, expired, or its account was switched off | Sign in again |
 
 The sync's problems are listed to the administrator and never applied: `GROUP_ASSIGNMENT`, `NAME_MISSING`, `NO_ADDRESS`,
-`ADDRESS_TAKEN`, `MULTIPLE_ROLES`, `ROLE_NOT_IN_MICROSOFT`, `RIDER_ROLE` and `BAD_ROLE_VALUE`. `PROFILE_HOOK_FAILED` means the
+`ADDRESS_TAKEN`, `MULTIPLE_ROLES`, `ROLE_NOT_IN_MICROSOFT`, `RIDER_ROLE` and `BAD_ROLE_VALUE`. With `SyncCreatesAccounts` on, a
+creation can also list `NOT_COMPANY_ADDRESS` (the address is not at one of `Domains`) and `CREATE_FAILED` (the database refused
+the new account). `PROFILE_HOOK_FAILED` means the
 app's own row for one person could not be written (section 12): that person's change was undone, and the rest of the run went
 on. A run that would switch off every linked account is stopped and writes nothing. Check the tenant, the app roles and the assignments in Entra first.

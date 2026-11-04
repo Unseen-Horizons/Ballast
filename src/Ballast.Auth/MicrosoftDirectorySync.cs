@@ -184,10 +184,10 @@ public sealed class MicrosoftDirectorySync<TUser, TKey, TRole, TRefresh, TContex
             return new MicrosoftSyncResult(MicrosoftSyncOutcome.NotHolder, null, null, plan.Counts, plan.Problems, plan.RolesNotInMicrosoft, secretEnds);
         }
 
-        List<MicrosoftSyncProblem> listed;
+        (List<MicrosoftSyncProblem> Listed, int Created) written;
         try
         {
-            listed = await WritePlanAsync(plan, emergency, ct);
+            written = await WritePlanAsync(plan, emergency, ct);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -195,8 +195,15 @@ public sealed class MicrosoftDirectorySync<TUser, TKey, TRole, TRefresh, TContex
             return new MicrosoftSyncResult(MicrosoftSyncOutcome.WriteFailed, DirectorySyncFailure.Unexpected, null, plan.Counts, plan.Problems, plan.RolesNotInMicrosoft, secretEnds);
         }
 
-        // The people whose profile hook failed are listed with the plan's own problems. Their change was rolled back; the others were applied.
-        return new MicrosoftSyncResult(MicrosoftSyncOutcome.Applied, null, null, plan.Counts, [.. plan.Problems, .. listed], plan.RolesNotInMicrosoft, secretEnds);
+        // The people whose change was rolled back are listed with the plan's own problems. The applied run's Created is the number that committed.
+        return new MicrosoftSyncResult(
+            MicrosoftSyncOutcome.Applied,
+            null,
+            null,
+            plan.Counts with { Created = written.Created },
+            [.. plan.Problems, .. written.Listed],
+            plan.RolesNotInMicrosoft,
+            secretEnds);
     }
 
     // The app's emergency accounts, as the text ids the plan and the write step use.
@@ -209,9 +216,10 @@ public sealed class MicrosoftDirectorySync<TUser, TKey, TRole, TRefresh, TContex
     // The plan's changes, in one transaction. The execution strategy replays it whole after a transient fault, from a clean tracker. A profile hook
     // that throws undoes only its person's change, back to that person's savepoint, and the person is returned as listed; any other failure rolls
     // back the whole transaction, so a failed write changes nothing.
-    private async Task<List<MicrosoftSyncProblem>> WritePlanAsync(MicrosoftSyncPlanResult plan, HashSet<string> emergency, CancellationToken ct)
+    private async Task<(List<MicrosoftSyncProblem> Listed, int Created)> WritePlanAsync(MicrosoftSyncPlanResult plan, HashSet<string> emergency, CancellationToken ct)
     {
         List<MicrosoftSyncProblem> listed = [];
+        var created = 0;
         var attempt = 0;
         await _db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
@@ -219,6 +227,7 @@ public sealed class MicrosoftDirectorySync<TUser, TKey, TRole, TRefresh, TContex
             {
                 _db.ChangeTracker.Clear();
                 listed.Clear();
+                created = 0;
             }
 
             await using var transaction = await _db.Database.BeginTransactionAsync(ct);
@@ -242,6 +251,19 @@ public sealed class MicrosoftDirectorySync<TUser, TKey, TRole, TRefresh, TContex
                         user => _staff.ApplyAsync(user, update.Person, update.Roles, ct),
                         ct);
                     if (problem is not null)
+                    {
+                        listed.Add(problem);
+                    }
+                }
+
+                foreach (var creation in plan.Creations)
+                {
+                    var problem = await CreatePersonAsync(transaction, creation, ct);
+                    if (problem is null)
+                    {
+                        created++;
+                    }
+                    else
                     {
                         listed.Add(problem);
                     }
@@ -271,7 +293,7 @@ public sealed class MicrosoftDirectorySync<TUser, TKey, TRole, TRefresh, TContex
             }
         });
 
-        return listed;
+        return (listed, created);
     }
 
     // One person's change, inside the run's transaction and under the person's savepoint. A profile hook that throws is rolled back to the savepoint,
@@ -301,6 +323,42 @@ public sealed class MicrosoftDirectorySync<TUser, TKey, TRole, TRefresh, TContex
             _db.ChangeTracker.Clear();
             _logger.LogError(ex, "The app's Microsoft staff profile hook failed for {Subject}. That person's change was rolled back; the other changes were kept.", subject);
             return new MicrosoftSyncProblem(MicrosoftSyncProblems.ProfileHookFailed, subject, ex.InnerException?.GetType().Name);
+        }
+    }
+
+    // One person's creation, as a first Microsoft sign-in makes an account, under the person's own savepoint. Identity refusing the name or the address
+    // (another account holds it) is listed as ADDRESS_TAKEN and nothing is linked by address. A profile hook that throws is rolled back and listed.
+    // A database write that fails is rolled back and listed as CREATE_FAILED; any other exception is left to the caller, which rolls back the run.
+    private async Task<MicrosoftSyncProblem?> CreatePersonAsync(IDbContextTransaction transaction, MicrosoftSyncCreation creation, CancellationToken ct)
+    {
+        var subject = creation.Person.Address;
+        await transaction.CreateSavepointAsync(PersonSavepoint, ct);
+        try
+        {
+            var user = await _staff.CreateAsync(creation.Person, creation.Roles, ct);
+            if (user is null)
+            {
+                await transaction.RollbackToSavepointAsync(PersonSavepoint, ct);
+                _db.ChangeTracker.Clear();
+                return new MicrosoftSyncProblem(MicrosoftSyncProblems.AddressTaken, subject);
+            }
+
+            await _db.SaveChangesAsync(ct);
+            return null;
+        }
+        catch (MicrosoftStaffProfileException ex)
+        {
+            await transaction.RollbackToSavepointAsync(PersonSavepoint, ct);
+            _db.ChangeTracker.Clear();
+            _logger.LogError(ex, "The app's Microsoft staff profile hook failed while creating {Subject}. That person's creation was rolled back; the other changes were kept.", subject);
+            return new MicrosoftSyncProblem(MicrosoftSyncProblems.ProfileHookFailed, subject, ex.InnerException?.GetType().Name);
+        }
+        catch (DbUpdateException ex)
+        {
+            await transaction.RollbackToSavepointAsync(PersonSavepoint, ct);
+            _db.ChangeTracker.Clear();
+            _logger.LogError(ex, "The database refused the creation of the Microsoft account for {Subject}. That person's creation was rolled back; the other changes were kept.", subject);
+            return new MicrosoftSyncProblem(MicrosoftSyncProblems.CreateFailed, subject, ex.GetType().Name);
         }
     }
 

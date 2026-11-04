@@ -28,6 +28,12 @@ public static class MicrosoftSyncProblems
     /// <summary>A role marked as Microsoft's no longer exists in Microsoft. It is listed, and never deleted: its permissions live here.</summary>
     public const string RoleNotInMicrosoft = "ROLE_NOT_IN_MICROSOFT";
 
+    /// <summary>The person's address is not at one of the company domains, so the account is not created. Only with <see cref="MicrosoftSignInOptions.SyncCreatesAccounts"/>.</summary>
+    public const string NotCompanyAddress = "NOT_COMPANY_ADDRESS";
+
+    /// <summary>The account for a person could not be created, because the write failed (not a refusal). The person is left as they were.</summary>
+    public const string CreateFailed = "CREATE_FAILED";
+
     /// <summary>
     /// The app's Microsoft staff profile hook threw for this person. That person's change was rolled back; the other people's changes were applied.
     /// The subject is the person's address.
@@ -62,12 +68,20 @@ public sealed record MicrosoftSyncUpdate(string UserId, MicrosoftPerson Person, 
 /// <param name="AppRoles">The app role values of this application.</param>
 /// <param name="Updated">The linked accounts whose address, roles or switch-on would change.</param>
 /// <param name="SwitchedOff">The linked accounts the run switches off.</param>
-public sealed record MicrosoftSyncCounts(int UsersAssigned, int AppRoles, int Updated, int SwitchedOff);
+/// <param name="Created">The accounts the run creates for people with none yet. Zero when <see cref="MicrosoftSignInOptions.SyncCreatesAccounts"/> is off.</param>
+public sealed record MicrosoftSyncCounts(int UsersAssigned, int AppRoles, int Updated, int SwitchedOff, int Created);
+
+/// <summary>An account the run creates for an assigned person who has none: made as a first sign-in makes it.</summary>
+/// <param name="ObjectId">The person's Microsoft object id, which becomes the account's Microsoft login.</param>
+/// <param name="Person">What Microsoft gives for the person.</param>
+/// <param name="Roles">The console roles the person gets.</param>
+public sealed record MicrosoftSyncCreation(string ObjectId, MicrosoftPerson Person, IReadOnlyList<string> Roles);
 
 /// <summary>
 /// What one run would do. The plan is decided before anything is written; <see cref="LooksWrong"/> stops the run.
 /// </summary>
 /// <param name="Updates">The linked accounts to apply.</param>
+/// <param name="Creations">The accounts to create for people with none yet. Empty unless the switch is on.</param>
 /// <param name="SwitchOffUserIds">The linked accounts to switch off.</param>
 /// <param name="RolesToCreate">The console roles that do not exist yet.</param>
 /// <param name="RolesNotInMicrosoft">The roles from Microsoft that are no longer in Microsoft. Listed, never deleted.</param>
@@ -76,6 +90,7 @@ public sealed record MicrosoftSyncCounts(int UsersAssigned, int AppRoles, int Up
 /// <param name="LooksWrong">True when the run would leave no linked account on, though some were on.</param>
 public sealed record MicrosoftSyncPlanResult(
     IReadOnlyList<MicrosoftSyncUpdate> Updates,
+    IReadOnlyList<MicrosoftSyncCreation> Creations,
     IReadOnlyList<string> SwitchOffUserIds,
     IReadOnlyList<string> RolesToCreate,
     IReadOnlyList<string> RolesNotInMicrosoft,
@@ -189,6 +204,7 @@ public static class MicrosoftSyncPlan
         var linked = accounts.ToDictionary(account => account.ObjectId, StringComparer.OrdinalIgnoreCase);
 
         List<MicrosoftSyncUpdate> updates = [];
+        List<MicrosoftSyncCreation> creations = [];
         List<string> switchOffIds = [];
 
         // The object ids the directory has decided: updated, switched off, or left as they are.
@@ -255,9 +271,22 @@ public static class MicrosoftSyncPlan
                 problems.Add(new MicrosoftSyncProblem(MicrosoftSyncProblems.AddressTaken, address));
             }
 
-            // A person with no account yet is not created here: the first sign-in makes it.
+            // A person with no account yet is created only when the switch is on, and then as a first sign-in creates one: the same company-address
+            // rule, and never over an address another account holds (that is the problem listed above, and no link is made by address).
             if (account is null)
             {
+                if (options.SyncCreatesAccounts && !addressTaken)
+                {
+                    if (options.IsCompanyAddress(address))
+                    {
+                        creations.Add(new MicrosoftSyncCreation(objectId, new MicrosoftPerson(objectId, address, given, surname, values), roles));
+                    }
+                    else
+                    {
+                        problems.Add(new MicrosoftSyncProblem(MicrosoftSyncProblems.NotCompanyAddress, address));
+                    }
+                }
+
                 continue;
             }
 
@@ -293,8 +322,9 @@ public static class MicrosoftSyncPlan
             valuesByUser.Count,
             roleValueList.Count,
             updates.Count(update => update.Changed),
-            switchOffIds.Count);
+            switchOffIds.Count,
+            creations.Count);
 
-        return new MicrosoftSyncPlanResult(updates, switchOffIds, rolesToCreate, rolesNotInMicrosoft, problems, counts, looksWrong);
+        return new MicrosoftSyncPlanResult(updates, creations, switchOffIds, rolesToCreate, rolesNotInMicrosoft, problems, counts, looksWrong);
     }
 }
