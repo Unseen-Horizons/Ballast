@@ -121,7 +121,8 @@
     /**
      * Signs out: forgets both tokens and goes to the sign-in page. Nothing is kept for a later visit.
      * With logoutPath set and a refresh token stored, the refresh token is first posted to logoutPath as { refreshToken } (JSON,
-     * keepalive, through the native fetch), so the server can end the session. The tokens are cleared, and the sign-in page is
+     * keepalive, through the native fetch, with Authorization: Bearer <access token> when an access token is stored), so the server
+     * can end the session. The tokens are cleared, and the sign-in page is
      * opened, whatever the answer or a network failure; a request still unanswered after refreshTimeoutMs counts as a failure.
      * @returns {Promise<boolean>} true when the server confirmed the sign-out, or there was nothing to send (no logoutPath, or no
      *   refresh token stored); false when the server did not. The tokens are cleared either way.
@@ -134,6 +135,11 @@
         return Promise.resolve(true);
       }
 
+      // The access token, when one is stored, goes with the request: a logout endpoint that needs sign-in then ends the session.
+      var logoutHeaders = { 'Content-Type': 'application/json' };
+      var access = token();
+      if (access) logoutHeaders.Authorization = 'Bearer ' + access;
+
       var timer = null;
       var timedOut = new Promise(function (resolve) {
         timer = setTimeout(function () { resolve(false); }, refreshTimeoutMs);
@@ -141,7 +147,7 @@
       var answered = new Promise(function (resolve) {
         resolve(baseFetch()(logoutPath, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: logoutHeaders,
           body: JSON.stringify({ refreshToken: stored }),
           keepalive: true
         }));

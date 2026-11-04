@@ -257,6 +257,31 @@ describe('createShell.api', () => {
     assert.equal(h.shell.httpErrorMessage(500, undefined), 'HTTP 500');
     assert.equal(h.shell.httpErrorMessage(409, { detail: 'Already done.', traceId: 't9' }), 'Already done. (ref t9)');
   });
+
+  it('gives the full text by default, with the field messages and the trace reference', async () => {
+    const body = { title: 'One or more validation errors occurred.', errors: { Name: ['Required.'] }, traceId: 't7' };
+    const h = harness({ fetchImpl: () => json(body, 400) });
+    await assert.rejects(() => h.shell.api('/admin/x', { method: 'POST' }),
+      (error) => error.message === 'One or more validation errors occurred. — Name: Required. (ref t7)');
+  });
+
+  it('applies the problem option to the call banner: fieldErrors and traceId off leave the title', async () => {
+    const body = { title: 'One or more validation errors occurred.', errors: { Name: ['Required.'] }, traceId: 't7' };
+    const h = harness({
+      shellOptions: { problem: { fieldErrors: false, traceId: false } },
+      fetchImpl: () => json(body, 400)
+    });
+    await assert.rejects(() => h.shell.api('/admin/x', { method: 'POST' }),
+      (error) => error.message === 'One or more validation errors occurred.' && error.status === 400);
+  });
+
+  it('applies the problem option to httpErrorMessage too, and a problem fallback replaces the HTTP status text', () => {
+    const off = harness({ shellOptions: { problem: { traceId: false } } });
+    assert.equal(off.shell.httpErrorMessage(409, { detail: 'Already done.', traceId: 't9' }), 'Already done.');
+
+    const fallback = harness({ shellOptions: { problem: { fallback: 'Try again.' } } });
+    assert.equal(fallback.shell.httpErrorMessage(500, undefined), 'Try again.');
+  });
 });
 
 describe('createShell: banners, pagination and counts', () => {

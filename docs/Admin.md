@@ -194,7 +194,8 @@ How it behaves:
   sign-in at once, except the sign-in page itself.
 - `toLogin()` keeps the current address under `redirectKey` and opens the sign-in page.
 - `signOut()` clears both tokens and opens the sign-in page. Nothing is kept for a later visit. With `logoutPath` set and a
-  refresh token stored, it first posts the refresh token there and waits for the answer, at most `refreshTimeoutMs`. The tokens
+  refresh token stored, it first posts the refresh token there, with `Authorization: Bearer <access token>` when an access token
+  is stored (so a logout endpoint that needs sign-in ends the session), and waits for the answer, at most `refreshTimeoutMs`. The tokens
   are cleared and the sign-in page is opened whatever the answer or a network failure. It returns a promise of `true` when the
   server confirmed the sign-out (or there was nothing to send: no `logoutPath`, or no refresh token), and `false` when it did not.
   The promise is always returned; without `logoutPath` the tokens are cleared at once, as before.
@@ -219,6 +220,7 @@ Draws the rail (the navigation), the top bar and the content area, and gives the
 | `counts` | none | A function that reads the counts as `{ key: number }`. It is given the shell. |
 | `countsDelayMs` | 250 | How long after the page opens the counts are read. |
 | `mePath` | none | The endpoint that answers `{ permissions, fullAccess }`, such as the `AdminWhoAmI` endpoint. |
+| `problem` | `{}` | The options `problemMessage` takes (`fieldErrors`, `traceId`, `codeText`, `preferDetail`, `fallback`), passed on every error banner the shell writes. The defaults give the full text. An app that keeps its own banner text passes `{ fieldErrors: false, traceId: false }`. For `httpErrorMessage` a given `fallback` replaces `HTTP <status>`. |
 | `highlightHash` | true | Brings the element named by the address's hash into view. |
 | `window`, `document`, `storage`, `fetch` | the page's | The browser objects. `storage` (sessionStorage) keeps the counts for the next page. |
 | `countsKey` | `_shellCounts` | The storage key of the counts. |
