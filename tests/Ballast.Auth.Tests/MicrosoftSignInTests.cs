@@ -677,6 +677,122 @@ public class MicrosoftSignInTests
     }
 
     [Fact]
+    public async Task With_the_switch_off_the_sync_creates_no_account_for_an_assigned_person_who_has_none()
+    {
+        var graph = new FakeGraph();
+        var log = new StaffProfileLog();
+        await using var host = await HostAsync(graph: graph, sync: true, configure: o => o.FullAccessRole = "Admin", profileLog: log);
+        graph.Snapshot = Directory((Ana, "ana@example.test", "Ana", "Horvat"));
+
+        await using var scope = host.Scope();
+        var result = await scope.ServiceProvider.GetRequiredService<MsSync>().RunOnceAsync();
+
+        Assert.Equal(MicrosoftSyncOutcome.Applied, result.Outcome);
+        Assert.Equal(0, result.Counts!.Created);
+        Assert.Empty(log.Calls);
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<StringUser>>();
+        Assert.Null(await users.FindByLoginAsync(AuthProviders.Microsoft, Ana.ToString("D")));
+        Assert.False(await scope.ServiceProvider.GetRequiredService<StringDb>().Users.AnyAsync(user => user.Email == "ana@example.test"));
+    }
+
+    [Fact]
+    public async Task With_the_switch_on_the_sync_creates_an_assigned_person_through_the_hook_and_links_the_login()
+    {
+        var graph = new FakeGraph();
+        var log = new StaffProfileLog();
+        await using var host = await HostAsync(graph: graph, sync: true, configure: o => CreatingOn(o), profileLog: log);
+        graph.Snapshot = Directory((Ana, "ana@example.test", "Ana", "Horvat"));
+
+        await using (var scope = host.Scope())
+        {
+            var result = await scope.ServiceProvider.GetRequiredService<MsSync>().RunOnceAsync();
+            Assert.Equal(MicrosoftSyncOutcome.Applied, result.Outcome);
+            Assert.Equal(1, result.Counts!.Created);
+            Assert.Empty(result.Problems);
+        }
+
+        Assert.Equal("creating:ana@example.test", Assert.Single(log.Calls));
+        Assert.False(log.StoredWhenCreating);
+
+        await using var check = host.Scope();
+        var users = check.ServiceProvider.GetRequiredService<UserManager<StringUser>>();
+        var user = await users.FindByLoginAsync(AuthProviders.Microsoft, Ana.ToString("D"));
+        Assert.NotNull(user);
+        Assert.Equal("ana@example.test", user.Email);
+        Assert.Equal("Ana Horvat", user.FullName);
+        Assert.Contains("Admin", await users.GetRolesAsync(user));
+    }
+
+    [Fact]
+    public async Task With_the_switch_on_an_address_an_unlinked_account_holds_is_a_problem_row_and_no_login_is_linked_to_it()
+    {
+        var graph = new FakeGraph();
+        var log = new StaffProfileLog();
+        await using var host = await HostAsync(graph: graph, sync: true, configure: o => CreatingOn(o), profileLog: log);
+        await host.CreateUserAsync("ana@example.test", null);
+        graph.Snapshot = Directory((Ana, "ana@example.test", "Ana", "Horvat"));
+
+        await using var scope = host.Scope();
+        var result = await scope.ServiceProvider.GetRequiredService<MsSync>().RunOnceAsync();
+
+        Assert.Equal(MicrosoftSyncOutcome.Applied, result.Outcome);
+        Assert.Equal(0, result.Counts!.Created);
+        var problem = Assert.Single(result.Problems);
+        Assert.Equal(MicrosoftSyncProblems.AddressTaken, problem.Code);
+        Assert.Empty(log.Calls);
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<StringUser>>();
+        Assert.Null(await users.FindByLoginAsync(AuthProviders.Microsoft, Ana.ToString("D")));
+    }
+
+    [Fact]
+    public async Task With_the_switch_on_a_creation_whose_profile_hook_fails_is_undone_alone_and_the_sync_reports_it_and_goes_on()
+    {
+        var graph = new FakeGraph();
+        var log = new StaffProfileLog();
+        await using var host = await HostAsync(graph: graph, sync: true, configure: o => CreatingOn(o), profileLog: log, profileFailsFor: "ana@example.test");
+        graph.Snapshot = Directory((Ana, "ana@example.test", "Ana", "Horvat"), (Bo, "bo@example.test", "Bo", "Kovac"));
+
+        await using var scope = host.Scope();
+        var result = await scope.ServiceProvider.GetRequiredService<MsSync>().RunOnceAsync();
+
+        Assert.Equal(MicrosoftSyncOutcome.Applied, result.Outcome);
+        Assert.Equal(1, result.Counts!.Created);
+        var problem = Assert.Single(result.Problems);
+        Assert.Equal(MicrosoftSyncProblems.ProfileHookFailed, problem.Code);
+        Assert.Equal("ana@example.test", problem.Subject);
+
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<StringUser>>();
+        Assert.Null(await users.FindByLoginAsync(AuthProviders.Microsoft, Ana.ToString("D")));
+        Assert.False(await scope.ServiceProvider.GetRequiredService<StringDb>().Users.AnyAsync(user => user.Email == "ana@example.test"));
+        var bo = await users.FindByLoginAsync(AuthProviders.Microsoft, Bo.ToString("D"));
+        Assert.NotNull(bo);
+        Assert.Contains("Admin", await users.GetRolesAsync(bo));
+    }
+
+    [Fact]
+    public void The_plan_counts_the_creations_it_would_make_and_none_with_the_switch_off()
+    {
+        var directory = Directory((Ana, "ana@example.test", "Ana", "Horvat"), (Bo, "bo@example.test", "Bo", "Kovac"));
+        var options = new MicrosoftSignInOptions { TenantId = Tenant, ClientId = Client, ConsolePrefix = "Api", FullAccessRole = "Admin" };
+
+        var off = MicrosoftSyncPlan.Plan(directory, options, [], [], new Dictionary<string, string>(), new HashSet<string>());
+        Assert.Equal(0, off.Counts.Created);
+        Assert.Empty(off.Creations);
+
+        options.SyncCreatesAccounts = true;
+        var on = MicrosoftSyncPlan.Plan(directory, options, [], [], new Dictionary<string, string>(), new HashSet<string>());
+        Assert.Equal(2, on.Counts.Created);
+        Assert.Equal(2, on.Creations.Count);
+        Assert.Contains(on.Creations, creation => creation.ObjectId == Ana.ToString("D") && creation.Roles.Contains("Admin"));
+    }
+
+    private static void CreatingOn(MicrosoftSignInOptions options)
+    {
+        options.FullAccessRole = "Admin";
+        options.SyncCreatesAccounts = true;
+    }
+
+    [Fact]
     public async Task An_int_keyed_app_sets_the_account_key_in_its_hook_and_the_insert_keeps_that_key()
     {
         await using var host = await IntHostAsync();
