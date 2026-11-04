@@ -5,8 +5,10 @@
 using Ballast.AspNetCore;
 using Ballast.Errors;
 
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Ballast.AspNetCore.Tests;
 
@@ -44,5 +46,29 @@ public class ReadmeExampleTests
         Console.WriteLine($"{http.Response.StatusCode} {new StreamReader(http.Response.Body).ReadToEnd()}");
 
         Assert.Equal(404, http.Response.StatusCode);
+    }
+
+    [Fact]
+    public async Task The_readme_credential_example_runs_as_written()
+    {
+        // The example, copied from src/Ballast.AspNetCore/README.md.
+        var services = new ServiceCollection();
+        services.AddDataProtection();
+        services.AddLogging();
+        services.AddSecretProtector("Example.Credentials");
+        await using var provider = services.BuildServiceProvider();
+        var protector = provider.GetRequiredService<SecretProtector>();
+
+        // Stored encrypted: the database never holds the plain value.
+        var stored = protector.Protect("bearer-abc-123")!;
+        Assert.True(stored.StartsWith("enc:v1:", StringComparison.Ordinal) && !stored.Contains("bearer-abc-123"));
+        Assert.Equal("bearer-abc-123", protector.Unprotect(stored));
+
+        // A payload from another purpose does not open. The read goes on without the credential, and the warning names the source.
+        var other = new SecretProtector(provider.GetRequiredService<IDataProtectionProvider>(), NullLogger<SecretProtector>.Instance,
+            new SecretProtectorOptions { Purpose = "Example.Other" });
+        var read = other.UnprotectForRead(stored, "Feed North", out var warning);
+        Assert.Equal("True Feed North: its stored credential could not be decrypted, so the request was sent without it. Re-enter the credential on the source.",
+            $"{read is null} {warning}");
     }
 }

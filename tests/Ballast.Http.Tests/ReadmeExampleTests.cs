@@ -48,4 +48,15 @@ public class ReadmeExampleTests
         Assert.Equal("https://127.0.0.1/feed.zip", redacted);
         Assert.Equal("https://feeds.example.test/gtfs.zip?[redacted]", logged);
     }
+
+    [Fact]
+    public async Task The_readme_pacer_example_runs_as_written()
+    {
+        // The example, copied from src/Ballast.Http/README.md. The second request waits the three-second gap.
+        using var pacer = new HostPacer();
+        var first = await pacer.RunAsync("notices.example.test", TimeSpan.FromSeconds(3), () => Task.FromResult("first"));
+        var second = await pacer.RunAsync("notices.example.test", TimeSpan.FromSeconds(3), () => Task.FromResult("second"));
+
+        Assert.Equal("first second", $"{first} {second}");
+    }
 }

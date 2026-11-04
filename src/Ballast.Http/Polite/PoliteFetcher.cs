@@ -26,7 +26,7 @@ namespace Ballast.Http;
 /// The HTTP client is a named one from <see cref="PoliteFetcherExtensions.AddPoliteFetcher"/>, which has no automatic redirects and the
 /// public-only connect check. The clock and the wait are injectable, so tests do not sleep.
 /// </summary>
-public sealed class PoliteFetcher
+public sealed class PoliteFetcher : IDisposable
 {
     /// <summary>The most redirects one fetch follows (the same limit for robots.txt).</summary>
     public const int MaxRedirects = 5;
@@ -84,6 +84,12 @@ public sealed class PoliteFetcher
         _time = time ?? TimeProvider.System;
         _pacer = new HostPacer(_time, wait ?? ((delay, ct) => Task.Delay(delay, ct)));
     }
+
+    /// <summary>
+    /// Stops the fetcher's per-host pacer. A later <see cref="GetAsync"/> throws <see cref="ObjectDisposedException"/>. A fetch
+    /// already running finishes. The dependency injection container calls this when a keyed singleton is disposed.
+    /// </summary>
+    public void Dispose() => _pacer.Dispose();
 
     /// <summary>
     /// Reads <paramref name="url"/>, or says why not. The body is at most <paramref name="maxBytes"/> bytes. The caller's cancellation

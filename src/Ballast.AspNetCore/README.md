@@ -48,4 +48,37 @@ Console.WriteLine($"{http.Response.StatusCode} {new StreamReader(http.Response.B
 The example prints the status and the answer's JSON: `404` followed by the problem, with the code `NOT_FOUND` and the trace
 reference.
 
-The usage guide, with every option, the wiring of a real host and every way the library fails, is `docs/AspNetCore.md` in the repository.
+## Protecting a stored credential
+
+`SecretProtector` encrypts a credential before it is stored and decrypts it where it is used. The purpose string is the application's
+own, kept for good: a payload protected under one purpose does not open under another.
+
+```csharp
+using Ballast.AspNetCore;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+
+var services = new ServiceCollection();
+services.AddDataProtection();
+services.AddLogging();
+services.AddSecretProtector("Example.Credentials");
+using var provider = services.BuildServiceProvider();
+var protector = provider.GetRequiredService<SecretProtector>();
+
+// Stored encrypted: the database never holds the plain value.
+var stored = protector.Protect("bearer-abc-123")!;
+Console.WriteLine(stored.StartsWith("enc:v1:", StringComparison.Ordinal) && !stored.Contains("bearer-abc-123"));
+Console.WriteLine(protector.Unprotect(stored));
+
+// A payload from another purpose does not open. The read goes on without the credential, and the warning names the source.
+var other = new SecretProtector(provider.GetRequiredService<IDataProtectionProvider>(), NullLogger<SecretProtector>.Instance,
+    new SecretProtectorOptions { Purpose = "Example.Other" });
+var read = other.UnprotectForRead(stored, "Feed North", out var warning);
+Console.WriteLine($"{read is null} {warning}");
+```
+
+The example prints `True`, then `bearer-abc-123`, then `True Feed North: its stored credential could not be decrypted, so the request was sent
+without it. Re-enter the credential on the source.`
+
+The usage guide, with every option, the wiring of a real host, the unreadable modes and every way the library fails, is `docs/AspNetCore.md` in the repository.
