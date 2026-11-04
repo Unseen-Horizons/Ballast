@@ -56,4 +56,28 @@ public class ReadmeExampleTests
 
         await Assert.ThrowsAsync<Ballast.Errors.AppException>(() => tokens.CreateAsync("contact:99", TimeSpan.FromMinutes(10)));
     }
+
+    [Fact]
+    public void The_readme_sync_status_example_reports_an_applied_run_and_a_soon_secret()
+    {
+        var status = new MicrosoftSyncStatus();
+        var ended = new DateTimeOffset(2026, 11, 4, 10, 0, 0, TimeSpan.Zero);
+
+        // The job records the run's result when it ends. The library's sync returns the result.
+        status.Record(new MicrosoftSyncResult(
+            MicrosoftSyncOutcome.Applied,
+            Failure: null,
+            HttpStatus: null,
+            Counts: new MicrosoftSyncCounts(UsersAssigned: 12, AppRoles: 3, Updated: 1, SwitchedOff: 0, Created: 0),
+            Problems: [new MicrosoftSyncProblem("ROLE_NOT_IN_MICROSOFT", "Retired")],
+            RolesNotInMicrosoft: ["Retired"],
+            ClientSecretEndsUtc: ended.AddDays(10)), ended);
+
+        // The admin page reads a snapshot. The client secret ends in ten days, so it reads Soon.
+        var snapshot = status.Snapshot(ended);
+
+        Assert.Equal(MicrosoftSyncLastRun.Applied, snapshot.LastRun);
+        Assert.Equal(ClientSecretState.Soon, snapshot.ClientSecretState);
+        Assert.True(status.IsNotInMicrosoft("Retired"));
+    }
 }
