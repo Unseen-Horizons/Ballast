@@ -51,4 +51,16 @@ public class ReadmeExampleTests
             }
         }
     }
+
+    [Fact]
+    public void The_readme_bounded_read_example_runs_as_written()
+    {
+        // The example, copied from src/Ballast.Storage/README.md.
+        using var entry = new MemoryStream(new byte[100]);
+        using var bounded = new BoundedReadStream(entry, 10, "stops.txt");
+        var buffer = new byte[100];
+        var ex = Assert.Throws<InvalidDataException>(() => bounded.Read(buffer, 0, buffer.Length));
+
+        Assert.Equal("stops.txt expands past its declared size of 10 bytes", ex.Message);
+    }
 }

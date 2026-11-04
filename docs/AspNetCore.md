@@ -507,6 +507,12 @@ Each one is a deliberate choice; an application that depends on the old behaviou
 4. **Default API content security policy.** The library's default is `default-src 'none'; frame-ancestors 'none'; base-uri 'self'`. An
    application that used another string keeps it by setting `DefaultContentSecurityPolicy`.
 
+5. **Credential protector.** The two copies an application had are one `SecretProtector` now. Each copy's rule is kept: one copy threw on an
+   unreadable credential, and the other read it as null with a warning (`UnprotectForRead`). The first is `Throw`, which is the default; the
+   second is `ReadAsNull` for `Unprotect` and `UnprotectForRead` for the warning. The log lines and the exception message are generic, so
+   they name no application, and the exception message is now `The stored credential could not be decrypted. Re-enter it on its source;
+   the request was not sent without it.` An application that matches on the old message text must match the new one.
+
 ## Azure and the known proxy networks
 
 On Azure App Service the requests reach the application through the platform's front end. Unless the forwarded headers are read from a
@@ -516,6 +522,89 @@ end address. The list at `ForwardedHeaders:KnownNetworks` must name the networks
 Whether Azure publishes a fixed list of those networks is **NEEDS VERIFICATION**: it has not been established here, and the owner must
 confirm the Azure configuration before an Azure host relies on forwarded headers. Until then, leave the list empty (no forwarded header is read)
 or set `TrustAnySenderWhenEmpty` only where every request reaches the application through a proxy that sets the headers.
+
+## SecretProtector
+
+`SecretProtector` encrypts the credentials an application stores, so a database read is not a credential read. It wraps ASP.NET Core
+Data Protection with a purpose string the application passes in. A stored value starts with the marker `enc:v1:`, so ciphertext is never
+mistaken for a value written before protection existed.
+
+Encrypt where a credential is written and decrypt where it is spent. An EF value converter is not used: it would run inside the model and
+decrypt on every read, including reads that only ask whether a credential exists.
+
+### AddSecretProtector
+
+```csharp
+public static IServiceCollection AddSecretProtector(this IServiceCollection services, string purpose, SecretUnreadableMode unreadableMode = SecretUnreadableMode.Throw)
+```
+
+Registers a singleton `SecretProtector` with the purpose. The helper does not call `AddDataProtection` and does not configure the key ring:
+the application keeps its own key ring, and it must be shared by every copy that reads the values and kept across a host rebuild.
+
+Refusals happen at the call, so a bad setting stops the start:
+
+- a blank `purpose` gives `ArgumentException`;
+- an `unreadableMode` that is not a defined value gives `ArgumentOutOfRangeException`.
+
+The container resolves the `IDataProtectionProvider` when the protector is first requested. Without Data Protection registered, that request
+fails with the container's own error.
+
+### SecretProtectorOptions
+
+| Property | Default | Meaning |
+|---|---|---|
+| `Purpose` | blank (refused) | The data-protection purpose. It scopes the key: a payload protected under one purpose cannot be opened under another, even over the same key ring. An application keeps its exact string for good, because a changed string makes every stored credential unreadable. |
+| `UnreadableMode` | `Throw` | What `Unprotect` does with a stored credential that cannot be decrypted. See `SecretUnreadableMode`. |
+
+The constructor `new SecretProtector(IDataProtectionProvider, ILogger<SecretProtector>, SecretProtectorOptions)` is the same as the
+registration. It refuses a null argument with `ArgumentNullException`, a blank purpose with `ArgumentException`, and an undefined mode
+with `ArgumentOutOfRangeException`.
+
+### SecretUnreadableMode
+
+- `Throw` (the default): `Unprotect` throws `SecretProtector.CredentialUnavailableException`. The caller fails the read, so a request is
+  never sent without its credential.
+- `ReadAsNull`: `Unprotect` returns null. Null means "no credential" to the caller, so the caller must refuse or warn itself.
+
+### Protect, Unprotect and UnprotectForRead
+
+```csharp
+public string? Protect(string? plaintext)
+public string? Unprotect(string? stored)
+public string? UnprotectForRead(string? stored, string sourceName, out string? warning)
+```
+
+- `Protect` encrypts a credential. Null and blank pass through unchanged, because "no credential" is a state of its own. A value that already
+  carries the marker is returned unchanged, so a round trip never wraps it twice.
+- `Unprotect` decrypts a stored value. Null and blank pass through. A value without the marker is returned as it is. An unreadable value is
+  handled by the unreadable mode.
+- `UnprotectForRead` is for one read of a source: a poll, a run, a preview or a lookup. It never throws for an unreadable credential. The read
+  goes on without the credential (null), and `warning` names the source and never the value, for example
+  `Feed North: its stored credential could not be decrypted, so the request was sent without it. Re-enter the credential on the source.`
+  A blank or absent credential gives no warning. The log line is written once per source until its credential reads again, so a source
+  polled every few seconds does not repeat it. Its `sourceName` is required (`ArgumentNullException` when null).
+
+`UnprotectForRead` does not depend on the mode: it always reads an unreadable credential as null with a warning. The caller decides what the
+warning does.
+
+### SecretProtector.CredentialUnavailableException
+
+The exception that `Unprotect` throws in `Throw` mode. Its message is safe to show an administrator and names no value:
+`The stored credential could not be decrypted. Re-enter it on its source; the request was not sent without it.`
+
+### Ways it fails
+
+| Situation | What happens |
+|---|---|
+| Blank `Purpose` | `ArgumentException` at registration or construction. |
+| Undefined `UnreadableMode` | `ArgumentOutOfRangeException` at registration or construction. |
+| A payload protected under another purpose, or by a key ring that is gone | The decrypt error is logged at Error level, without the value. `Unprotect` throws (`Throw`) or returns null (`ReadAsNull`). `UnprotectForRead` returns null with a warning. |
+| The key ring is not shared between copies of the application | The same as a payload from another key ring: it is unreadable on the copy that cannot read it. |
+| A value without the marker | Returned as it is. Nothing this class writes lacks the marker, so such a value was written by hand or before protection existed. |
+| The same unreadable source read again | `UnprotectForRead` logs one warning for it. Each decrypt attempt still logs its Error line. |
+| Null `sourceName` to `UnprotectForRead` | `ArgumentNullException`. |
+
+A stored credential never goes into a log, a warning or an exception message.
 
 ## Packaging and what is not set here
 

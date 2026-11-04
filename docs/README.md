@@ -11,10 +11,10 @@ has a short example that runs as written.
 - [Ballast.Money](Money.md): currency codes, rounding, totals and formatting.
 - [Ballast.Translations](Translations.md): parity checks for .resx and JSON translations, and a scan for the keys source code asks for.
 - [Ballast.Email](Email.md): SendGrid sending, the send rules, the address check and the send-once ledger. Setup: [SendGrid](setup/sendgrid.md).
-- [Ballast.Storage](Storage.md): atomic writes, leftover sweep, safe relative paths, the data folder and file types.
-- [Ballast.AspNetCore](AspNetCore.md): problem answers, exception mappings, rate limits, security headers, startup checks and forwarded headers.
+- [Ballast.Storage](Storage.md): atomic writes, leftover sweep, safe relative paths, the data folder, file types and reads capped at a declared size.
+- [Ballast.AspNetCore](AspNetCore.md): problem answers, exception mappings, rate limits, security headers, startup checks, the credential protector and forwarded headers.
 - [Ballast.Health](Health.md): readiness and liveness routes, build info, database and schema checks, startup gates, warm-up and the startup hold.
-- [Ballast.Http](Http.md): public-address guard, redirect rules, capped bodies, host credentials, safe log URLs, Retry-After and the polite fetcher.
+- [Ballast.Http](Http.md): public-address guard, redirect rules, capped bodies, host credentials, safe log URLs, Retry-After, the polite fetcher and the per-host pacer.
 - [Ballast.SqlServer](SqlServer.md): SQL error classes, the enum and delete conventions, transactions, claims, sequences, batches, collation and connection checks.
 - [Ballast.Jobs](Jobs.md): the job lock, leader-only hosted services, the 409 for admin actions and the job-lock readiness check.
 - [Ballast.AppAttestation](AppAttestation.md): Play Integrity app sessions, the gate, the web ticket and its cookie, and the store seams. Setup: [Play Integrity](setup/play-integrity.md).

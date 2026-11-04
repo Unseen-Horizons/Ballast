@@ -43,4 +43,18 @@ Console.WriteLine(UrlForLog.Redact("https://user:secret@feeds.example.test/gtfs.
 
 The example prints `NonPublicAddress https://127.0.0.1/feed.zip` and then `https://feeds.example.test/gtfs.zip?[redacted]`.
 
+## Pacing requests to one host
+
+```csharp
+using Ballast.Http;
+
+// One pacer for the application, registered as a singleton. The second request to a host starts 3 seconds after the first one ended.
+using var pacer = new HostPacer();
+var first = await pacer.RunAsync("notices.example.test", TimeSpan.FromSeconds(3), () => Task.FromResult("first"));
+var second = await pacer.RunAsync("notices.example.test", TimeSpan.FromSeconds(3), () => Task.FromResult("second"));
+Console.WriteLine($"{first} {second}");
+```
+
+The example prints `first second`, after the three-second gap.
+
 The usage guide, with every option, every public entry point and every way each one fails, is `docs/Http.md` in the repository.

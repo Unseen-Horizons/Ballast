@@ -392,6 +392,11 @@ The page's redirects follow the same rules as `RedirectFollower` with `RequireHt
 with no usable Location is refused as `RedirectRefused`. robots.txt is read over http as well. Its redirects may go to http,
 and a refused robots redirect disallows everything.
 
+#### Dispose
+
+`PoliteFetcher` is disposable: `Dispose` stops its per-host pacer, and a later `GetAsync` throws `ObjectDisposedException`. A fetch that is
+already running finishes. The dependency injection container disposes a keyed singleton at shutdown.
+
 #### The result
 
 ```csharp
@@ -467,6 +472,53 @@ Ways they fail:
 - `IsAllowed` with a null path is an `ArgumentNullException`.
 
 `AllowAll` allows every path, with no delay. `DisallowAll(reason)` disallows every path, and keeps the reason.
+
+## HostPacer
+
+`HostPacer` spaces requests to each host. A request to a host starts at least its gap after the previous request to that host ended. One
+request per host runs at a time, so two callers cannot both start inside one gap, and hosts do not wait for each other. It is the same rule
+the polite fetcher applies per host, public for an application that paces its own requests.
+
+```csharp
+public HostPacer(TimeProvider? clock = null)
+public Task<T> RunAsync<T>(string host, TimeSpan gap, Func<Task<T>> request, CancellationToken ct = default)
+public void Dispose()
+```
+
+- The clock is the `TimeProvider` given, or `TimeProvider.System`. A test passes its own clock, and a gap that has already passed on it
+  waits for nothing.
+- The wait between two requests is a real `Task.Delay`. The wait is not a public seam.
+- The host is the key, compared without case. To pace every request as one stream, use the same key for all of them: each request then
+  waits for the one before it to end and its gap to pass, whatever the host.
+- `ct` cancels the wait for the turn or for the gap. `request` is not given the token; a request that has started is not cancelled by it.
+- A request that fails still counts as ended, so the next request keeps its gap.
+- The gate is not re-entrant. A request must not call `RunAsync` for the same host and wait for it, or the two wait for each other for ever.
+  There is no timeout.
+- Register one instance as a singleton, so the gap holds across callers. A second instance paces nothing that the first one paces.
+
+### Dispose
+
+`Dispose` stops the pacer. A later `RunAsync` throws `ObjectDisposedException`. A request that is already waiting or running finishes and
+keeps its gap. The per-host gates are not disposed under those requests, because releasing a disposed gate would throw from the request's
+own cleanup. The gates hold no unmanaged resource, so they are freed with the pacer.
+
+### Ways it fails
+
+| Situation | What happens |
+|---|---|
+| Blank `host` | `ArgumentException`. |
+| Negative `gap` | `ArgumentOutOfRangeException`. |
+| Null `request` | `ArgumentNullException`. |
+| Pacer disposed | `ObjectDisposedException`, before any wait. |
+| `ct` cancelled before the turn | `OperationCanceledException`. The request does not start, and the host's last end is not moved. |
+| `ct` cancelled during the gap | `OperationCanceledException`. The request does not start, and the host's last end is not moved. |
+| The request throws | The exception passes to the caller. The request counts as ended for the next one. |
+
+### Replacing a pacer that paced one stream
+
+An application that paced all its notice and list requests as one stream (one gap, every source in turn) passes one key for all of them, for
+example a fixed name. Keyed by host, requests to different hosts run at the same time, so an application that must run one at a time keeps
+the one key.
 
 ## Development-only flags
 

@@ -5,6 +5,11 @@
     <Description>Outbound HTTP safety: a public-only destination guard, one redirect rule set, capped bodies, per-host credentials, safe URLs for logs, Retry-After handling, and a polite fetcher for public pages.</Description>
   </PropertyGroup>
 
+  <!-- The tests reach the wait seam of the pacer, which is internal so a caller cannot replace the real wait. -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="Ballast.Http.Tests" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.Extensions.Configuration.Abstractions" />
     <PackageReference Include="Microsoft.Extensions.Http" />

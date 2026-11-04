@@ -1,6 +1,6 @@
 # Ballast.Storage: usage guide
 
-Ballast.Storage gives code that writes files from requests five things:
+Ballast.Storage gives code that writes files from requests, and reads archive entries, six things:
 
 1. **Atomic writes** (`AtomicFile.WriteAsync`, and `AtomicFile.Write` for synchronous code): a file appears whole or not at all, and an existing file is replaced or refused
    as the caller chooses.
@@ -10,6 +10,7 @@ Ballast.Storage gives code that writes files from requests five things:
 4. **The data folder** (`DataRoot.Resolve`): on a host whose content folder is read-only, the writable data folder is named in
    configuration and checked before anything is written.
 5. **File types** (`FileKinds.Detect`): a file is recognised from its first bytes, never from its name or its declared type.
+6. **Declared sizes** (`BoundedReadStream`): an archive entry that expands past the size it declared throws, while it is read.
 
 It depends on .NET alone and no package. It uses no reflection and no dynamic code, so it stays trimmable and
 ahead-of-time compatible. The package README has a short example that runs as written.
@@ -321,6 +322,33 @@ The `FileSignatures` package (7.3.0, MIT) was checked first. It recognises JPEG,
 depends on another package, `OpenMcdf`, and it finds its formats by reflection over the assembly. This library has no package
 dependency and no reflection, so the five signatures and the HEIC brands are written here. They are short, and tests cover each
 one.
+
+## BoundedReadStream
+
+`BoundedReadStream` is a read-only wrapper that throws once more bytes have been read than its limit. It holds an archive entry to the size
+the entry declared. A limit on the whole archive is only a sum of the declared sizes, so without this an entry that lies about its size could
+still expand past the limit while it is parsed or hashed.
+
+```csharp
+public BoundedReadStream(Stream inner, long limit, string what)
+```
+
+- `inner` is the stream to read. It is disposed with the wrapper. Null gives `ArgumentNullException`.
+- `limit` is the most bytes that may be read, the declared size. A negative value gives `ArgumentOutOfRangeException`. Zero is allowed: an empty
+  stream reads, and one byte is refused.
+- `what` names the stream in the error, such as a file name. It is used as written; a null is written as an empty string.
+
+### Ways it fails
+
+| Situation | What happens |
+|---|---|
+| A read takes the total past `limit` | `InvalidDataException`, with the message `{what} expands past its declared size of {limit} bytes`. The bytes read before the refused read were returned already. |
+| A read ends exactly at `limit` | No error. The next read returns the end of the stream, as a read of the inner stream does. |
+| `Length`, `Position`, `Seek`, `SetLength`, `Write` | `NotSupportedException`: the wrapper is read-only and does not seek. |
+| Disposed | The inner stream is disposed too. |
+
+The refusal is an `InvalidDataException` (the type a reader already catches for a bad archive), not a type of the library's own. Read, ReadAsync
+and the span read count the same bytes.
 
 ## Trimming and ahead-of-time compilation
 
