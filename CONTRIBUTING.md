@@ -34,3 +34,9 @@ Read [CLAUDE.md](CLAUDE.md) for the full rules. The ones that most often decide 
 - A failure is reported as a failure. Nothing is silently replaced with a guess or a default.
 - Every instant is UTC, and every local time names its time zone.
 - An error code is a public contract. A released code is never renamed, reused or changed.
+
+## Releases
+
+Contributors do not publish. A release is a version tag that the owner approves in the `release` environment before the
+packages reach nuget.org. The steps are in [docs/releasing.md](docs/releasing.md), and the one-time account setup is in
+[docs/setup/publishing.md](docs/setup/publishing.md).

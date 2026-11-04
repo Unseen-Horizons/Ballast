@@ -1,7 +1,7 @@
 name: CI
 
-# Every push and every pull request. Ballast has no release workflow yet: packages are built and uploaded
-# here, and publishing is a later step.
+# Every push and every pull request. Packages are built and uploaded
+# here. Publishing happens only in release.yml, on a version tag, after the owner approves the run.
 
 on:
   push:

@@ -26,8 +26,8 @@
   </PropertyGroup>
 
   <!--
-    Package metadata, the same for every package. The repository address is not set yet (there is no git
-    remote), so PackageProjectUrl and RepositoryUrl are left out until it exists.
+    Package metadata, the same for every package. The repository address is the GitHub repository that
+    publishes these packages. Change the two repository addresses below if the organisation or the repository is renamed.
   -->
   <PropertyGroup>
     <Authors>Unseen Horizons</Authors>
@@ -37,6 +37,8 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>ballast</PackageTags>
     <RepositoryType>git</RepositoryType>
+    <RepositoryUrl>https://github.com/unseen-horizons/ballast</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/unseen-horizons/ballast</PackageProjectUrl>
   </PropertyGroup>
 
   <!--
