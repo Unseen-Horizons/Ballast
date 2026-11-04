@@ -121,8 +121,8 @@ public class StatsTests
             Assert.True(adjusted[i] <= 1.0);
         }
         for (var i = 0; i < p.Length; i++)
-        for (var j = 0; j < p.Length; j++)
-            if (p[i] <= p[j]) Assert.True(adjusted[i] <= adjusted[j] + 1e-12, $"p {p[i]} gave {adjusted[i]}, above {adjusted[j]} of p {p[j]}");
+            for (var j = 0; j < p.Length; j++)
+                if (p[i] <= p[j]) Assert.True(adjusted[i] <= adjusted[j] + 1e-12, $"p {p[i]} gave {adjusted[i]}, above {adjusted[j]} of p {p[j]}");
     }
 
     [Fact]
