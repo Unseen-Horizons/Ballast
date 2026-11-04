@@ -77,7 +77,7 @@
     <PackageVersion Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.23.0" />
   </ItemGroup>
   <ItemGroup Label="Build-time task of Ballast.Translations (private to that package, not a runtime dependency)">
-    <PackageVersion Include="Microsoft.Build.Utilities.Core" Version="18.0.2" />
+    <PackageVersion Include="Microsoft.Build.Utilities.Core" Version="18.11.0" />
   </ItemGroup>
   <ItemGroup Label="Ballast.Auth (sign-in, sessions, Identity, Google and Microsoft staff sign-in)">
     <!-- Microsoft packages at the .NET 10 GA line. Identity and JwtBearer are NuGet packages, not part of the shared framework. -->
