@@ -10,6 +10,8 @@ using Ballast.AppUpdates;
 using Ballast.Maui.Platform;
 using Ballast.Maui.Storage;
 
+using Microsoft.Extensions.Logging;
+
 namespace Ballast.Maui.AppUpdates;
 
 /// <summary>
@@ -31,6 +33,7 @@ public sealed class AppVersionService : IDisposable
     private readonly IAppUpdater? _updater;
     private readonly AppVersionOptions _options;
     private readonly TimeProvider _clock;
+    private readonly ILogger? _logger;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly object _sync = new();
     private AppVersionResponse? _info;
@@ -45,6 +48,7 @@ public sealed class AppVersionService : IDisposable
     /// <param name="updater">The store's update flow, or null when the store cannot say.</param>
     /// <param name="options">The keys and the store timeout, or null for the app's defaults.</param>
     /// <param name="clock">The clock for the check interval. The system clock when null.</param>
+    /// <param name="logger">Where a store answer that cannot be used is logged (no answer, a failed call, no build number). Null, the default, logs nothing there.</param>
     public AppVersionService(
         AppVersionClient client,
         IPreferenceStore preferences,
@@ -52,7 +56,8 @@ public sealed class AppVersionService : IDisposable
         IUpdateDevice device,
         IAppUpdater? updater = null,
         AppVersionOptions? options = null,
-        TimeProvider? clock = null)
+        TimeProvider? clock = null,
+        ILogger? logger = null)
     {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentNullException.ThrowIfNull(preferences);
@@ -65,6 +70,7 @@ public sealed class AppVersionService : IDisposable
         _updater = updater;
         _options = options ?? new AppVersionOptions();
         _clock = clock ?? TimeProvider.System;
+        _logger = logger;
     }
 
     /// <summary>Raised when the state changes.</summary>
@@ -143,7 +149,7 @@ public sealed class AppVersionService : IDisposable
 
             if (_device.PlatformQueryName is not { } platform)
             {
-                Trace.WriteLine("[AppVersion] No update check on this platform.");
+                Trace.WriteLine($"[AppVersion] No update check on {_device.PlatformName ?? "this platform"}.");
                 return Current;
             }
 
@@ -170,7 +176,7 @@ public sealed class AppVersionService : IDisposable
             }
 
             var answer = await _client.GetAsync(platform, channel, ct).ConfigureAwait(false);
-            var store = await AppVersionRules.AskStoreAsync(AppVersionRules.StoreUpdaterFor(channel, _updater), _options.StoreTimeout, null, ct).ConfigureAwait(false);
+            var store = await AppVersionRules.AskStoreAsync(AppVersionRules.StoreUpdaterFor(channel, _updater), _options.StoreTimeout, _logger, ct).ConfigureAwait(false);
             SaveStore(store);
             if (answer.Answered)
             {

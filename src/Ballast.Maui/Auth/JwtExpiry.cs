@@ -26,7 +26,13 @@ public static class JwtExpiry
             // Base64url, padding optional: the BCL reads both, so no padding fix-up is needed.
             var payload = Base64Url.DecodeFromChars(parts[1]);
             using var doc = JsonDocument.Parse(payload);
-            if (doc.RootElement.TryGetProperty("exp", out var expProp) && expProp.TryGetInt64(out var seconds))
+            // A payload that is JSON but not an object (an array, a number) has no claims, so it has no expiry either.
+            var root = doc.RootElement;
+            // TryGetInt64 throws, rather than answering false, for a value that is not a number, so the kind is checked first.
+            if (root.ValueKind == JsonValueKind.Object
+                && root.TryGetProperty("exp", out var expProp)
+                && expProp.ValueKind == JsonValueKind.Number
+                && expProp.TryGetInt64(out var seconds))
                 return DateTimeOffset.FromUnixTimeSeconds(seconds);
 
             return null;

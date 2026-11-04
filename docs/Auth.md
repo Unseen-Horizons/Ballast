@@ -406,7 +406,8 @@ locks the account until a later sync switches it on, and ends its sessions.
 - At most `MicrosoftGraphClient.MaxPages` (20) pages per list. A list with more is a read failure, never a partial read.
 - A next link is followed only when it is an `https` link on `graph.microsoft.com`, because the token goes with it.
 - A throttled answer (429 or 503) is retried once after its `Retry-After`, capped at 60 seconds. Without a `Retry-After`,
-  the wait is 10 seconds.
+  the wait is 10 seconds. The wait runs on the optional `TimeProvider` the constructor takes (the system clock by default), so a
+  test can record it instead of sleeping.
 - A request has a 30-second timeout (the typed HTTP client).
 - The read fails with a `MicrosoftGraphException` that names no token and no secret. The exception's `Failure` is one of
   `Token`, `Graph`, `Timeout`, `Response` or `Unexpected`.
@@ -437,8 +438,8 @@ locks the account until a later sync switches it on, and ends its sessions.
 - `MicrosoftSignInService` and `MicrosoftDirectorySync` take the profile hook as a new constructor parameter, and
   `MicrosoftSignInService` also takes a logger. `GoogleIdTokenValidator` takes the verifier. An app that builds these by
   hand, rather than from dependency injection, must pass them.
-- They do not run the HTTP routes end to end, and they do not test the Graph client's paging or throttling against a
-  live or fake HTTP server. Those are reviewed, not yet tested.
+- They do not run the HTTP routes end to end. The Graph client's paging, throttling and failures are tested against a
+  scripted HTTP handler (`MicrosoftGraphClientTests`), not against a live Microsoft Graph.
 - `IssuedSession` is the exchange's body. An app's `LoginResponse` may also carry a `user` object, so an app that keeps that body calls `ExchangeAsync` from its own endpoint.
 - The Microsoft sign-in does not link an existing password account, by address or otherwise. Moving a person from one
   tenant to another needs the app to remove the old Microsoft login first; the library has no call for that.

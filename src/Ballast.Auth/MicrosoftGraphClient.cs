@@ -31,14 +31,17 @@ public sealed class MicrosoftGraphClient : IMicrosoftGraphClient
 
     private readonly HttpClient _http;
     private readonly MicrosoftSignInOptions _options;
+    private readonly TimeProvider _time;
 
     /// <summary>Creates the client.</summary>
     /// <param name="http">The HTTP client, from the typed registration.</param>
     /// <param name="options">The settings: the tenant, the client id and the client secret.</param>
-    public MicrosoftGraphClient(HttpClient http, MicrosoftSignInOptions options)
+    /// <param name="time">The clock the Retry-After wait runs on. Null, the default, uses the system clock.</param>
+    public MicrosoftGraphClient(HttpClient http, MicrosoftSignInOptions options, TimeProvider? time = null)
     {
         _http = http;
         _options = options;
+        _time = time ?? TimeProvider.System;
     }
 
     /// <inheritdoc />
@@ -192,7 +195,7 @@ public sealed class MicrosoftGraphClient : IMicrosoftGraphClient
         var reply = await SendOnceAsync(build, failure, ct);
         if (reply.Status is HttpStatusCode.TooManyRequests or HttpStatusCode.ServiceUnavailable)
         {
-            await Task.Delay(reply.RetryWait, ct);
+            await Task.Delay(reply.RetryWait, _time, ct);
             reply = await SendOnceAsync(build, failure, ct);
         }
 

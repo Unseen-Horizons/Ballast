@@ -110,6 +110,9 @@ public sealed class MauiUpdateDevice : IUpdateDevice
     };
 
     /// <inheritdoc />
+    public string? PlatformName => DeviceInfo.Current.Platform.ToString();
+
+    /// <inheritdoc />
     public string? ManifestBuildText =>
         DeviceInfo.Current.Platform == DevicePlatform.Android || DeviceInfo.Current.Platform == DevicePlatform.iOS
             ? AppInfo.Current.BuildString
