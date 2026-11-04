@@ -16,6 +16,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Logging;
 
 namespace Ballast.Auth;
 
@@ -72,6 +73,7 @@ public sealed class MicrosoftSignInService<TUser, TKey, TRole, TRefresh, TContex
     private readonly IAuthAudit _audit;
     private readonly IMicrosoftEmergencyAccounts<TKey> _emergency;
     private readonly TimeProvider _time;
+    private readonly ILogger<MicrosoftSignInService<TUser, TKey, TRole, TRefresh, TContext>> _logger;
     private readonly MicrosoftStaffAccounts<TUser, TKey, TRole, TRefresh, TContext> _staff;
 
     /// <summary>Creates the service.</summary>
@@ -85,6 +87,7 @@ public sealed class MicrosoftSignInService<TUser, TKey, TRole, TRefresh, TContex
     /// <param name="emergency">The app's emergency accounts. A sign-in never links one to a Microsoft login, and never changes one.</param>
     /// <param name="profile">The app's own profile of a staff member. Its hooks run in the sign-in's transaction; a hook that throws rolls the sign-in back.</param>
     /// <param name="time">The clock.</param>
+    /// <param name="logger">Where each refusal is logged, with its code and the Microsoft object id.</param>
     public MicrosoftSignInService(
         AuthOptions auth,
         MicrosoftSignInOptions microsoft,
@@ -95,7 +98,8 @@ public sealed class MicrosoftSignInService<TUser, TKey, TRole, TRefresh, TContex
         IAuthAudit audit,
         IMicrosoftEmergencyAccounts<TKey> emergency,
         IMicrosoftStaffProfile<TUser, TKey> profile,
-        TimeProvider time)
+        TimeProvider time,
+        ILogger<MicrosoftSignInService<TUser, TKey, TRole, TRefresh, TContext>> logger)
     {
         _auth = auth;
         _microsoft = microsoft;
@@ -105,6 +109,7 @@ public sealed class MicrosoftSignInService<TUser, TKey, TRole, TRefresh, TContex
         _audit = audit;
         _emergency = emergency;
         _time = time;
+        _logger = logger;
         _staff = new MicrosoftStaffAccounts<TUser, TKey, TRole, TRefresh, TContext>(users, roles, sessions, audit, profile, time);
     }
 
@@ -115,7 +120,7 @@ public sealed class MicrosoftSignInService<TUser, TKey, TRole, TRefresh, TContex
     /// <param name="principal">The principal the handshake produced.</param>
     /// <param name="ct">Cancels the call.</param>
     /// <returns>The outcome.</returns>
-    public async Task<MicrosoftSignInOutcome<TKey>> CompleteAsync(ClaimsPrincipal principal, CancellationToken ct = default)
+    private async Task<MicrosoftSignInOutcome<TKey>> DecideAsync(ClaimsPrincipal principal, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(principal);
         if (!_microsoft.IsEnabled)
@@ -194,6 +199,28 @@ public sealed class MicrosoftSignInService<TUser, TKey, TRole, TRefresh, TContex
     }
 
     /// <summary>
+    /// Decides a Microsoft sign-in from the handshake's principal, and writes the account. A first sign-in creates it; a later one brings it up
+    /// to date. Returns the account to sign in, or the refusal the sign-in page shows. Every refusal is logged at Warning with its code and the
+    /// Microsoft object id, never the address, a token or a name.
+    /// </summary>
+    /// <param name="principal">The principal the handshake produced.</param>
+    /// <param name="ct">Cancels the call.</param>
+    /// <returns>The outcome.</returns>
+    public async Task<MicrosoftSignInOutcome<TKey>> CompleteAsync(ClaimsPrincipal principal, CancellationToken ct = default)
+    {
+        var outcome = await DecideAsync(principal, ct);
+        if (!outcome.IsAccepted)
+        {
+            _logger.LogWarning(
+                "Microsoft sign-in refused ({Refusal}, Microsoft object id {ObjectId}).",
+                outcome.RefusalCode,
+                principal.FindFirst("oid")?.Value ?? "none");
+        }
+
+        return outcome;
+    }
+
+    /// <summary>
     /// Completes the handshake of a request: reads the handshake cookie, decides the sign-in as the principal overload does, removes the cookie in
     /// every case, and returns the sign-in page's address. That address carries a one-time code when the sign-in is accepted, and the refusal when
     /// it is not. The library's complete route redirects to it, and so may an app's own callback route.
@@ -209,12 +236,19 @@ public sealed class MicrosoftSignInService<TUser, TKey, TRole, TRefresh, TContex
             return MicrosoftSignInRedirects.Error(_microsoft.LoginPagePath, MicrosoftRefusal.NotConfigured);
         }
 
-        // The handshake's result is read and removed in every case: a refusal and a success both leave the cookie gone.
-        var handshake = await http.AuthenticateAsync(_microsoft.CookieScheme);
-        var outcome = handshake.Succeeded && handshake.Principal is not null
-            ? await CompleteAsync(handshake.Principal, ct)
-            : MicrosoftSignInOutcome<TKey>.Refused(MicrosoftRefusal.SignInFailed);
-        await http.SignOutAsync(_microsoft.CookieScheme);
+        // The handshake's result is read and removed in every case: a refusal, a success and a throw all leave the cookie gone.
+        MicrosoftSignInOutcome<TKey> outcome;
+        try
+        {
+            var handshake = await http.AuthenticateAsync(_microsoft.CookieScheme);
+            outcome = handshake.Succeeded && handshake.Principal is not null
+                ? await CompleteAsync(handshake.Principal, ct)
+                : MicrosoftSignInOutcome<TKey>.Refused(MicrosoftRefusal.SignInFailed);
+        }
+        finally
+        {
+            await http.SignOutAsync(_microsoft.CookieScheme);
+        }
 
         if (!outcome.IsAccepted)
         {

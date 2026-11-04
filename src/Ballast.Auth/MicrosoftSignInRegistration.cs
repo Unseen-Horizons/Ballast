@@ -59,10 +59,8 @@ public static class MicrosoftSignInRegistration
         // The app's own profile of a staff member. The default keeps none; an app registers its own, and that registration is used.
         services.TryAddScoped<IMicrosoftStaffProfile<TUser, TKey>, NoMicrosoftStaffProfile<TUser, TKey>>();
 
-        if (microsoft.SyncEnabled)
-        {
-            services.AddHttpClient<IMicrosoftGraphClient, MicrosoftGraphClient>(client => client.Timeout = TimeSpan.FromSeconds(30));
-        }
+        // Registered whether or not the sync is on, so the sync always resolves. A sync that is off returns before it reads Microsoft.
+        services.AddHttpClient<IMicrosoftGraphClient, MicrosoftGraphClient>(client => client.Timeout = TimeSpan.FromSeconds(30));
 
         if (microsoft.IsEnabled)
         {

@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace Ballast.Auth.Tests;
 
@@ -79,6 +80,24 @@ internal sealed class FakeHandshake : IAuthenticationService
     /// <inheritdoc />
     public Task SignInAsync(HttpContext context, string? scheme, ClaimsPrincipal principal, AuthenticationProperties? properties) =>
         throw new NotSupportedException();
+}
+
+/// <summary>A logger that keeps each entry's level and message, so a test can read what was logged.</summary>
+internal sealed class CapturingLogger<T> : ILogger<T>
+{
+    /// <summary>The entries, in order.</summary>
+    public List<(LogLevel Level, string Message)> Entries { get; } = [];
+
+    /// <inheritdoc />
+    public IDisposable? BeginScope<TState>(TState state)
+        where TState : notnull => null;
+
+    /// <inheritdoc />
+    public bool IsEnabled(LogLevel logLevel) => true;
+
+    /// <inheritdoc />
+    public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+        Entries.Add((logLevel, formatter(state, exception)));
 }
 
 /// <summary>What the staff profile hook did, in order, and whether the account was already stored when the create hook ran.</summary>
@@ -251,6 +270,38 @@ public class MicrosoftSignInTests
     }
 
     [Fact]
+    public async Task With_the_sync_off_the_sync_and_its_graph_client_still_resolve_and_the_sync_does_nothing()
+    {
+        // No client secret, so the sync is off. This host registers the real graph client, with no fake in its place, so the test
+        // fails if the registration depends on the sync being on.
+        var settings = new List<KeyValuePair<string, string?>>
+        {
+            new("MicrosoftSignIn:TenantId", Tenant),
+            new("MicrosoftSignIn:ClientId", Client),
+        };
+        var configuration = TestConfig.Build(settings.ToArray());
+        await using var host = await Harness<StringUser, string, StringRefresh>.CreateAsync(
+            configuration,
+            extra: services =>
+            {
+                services.AddBallastMicrosoftSignIn<StringUser, string, IdentityRole<string>, StringRefresh, StringDb>(
+                    configuration,
+                    "MicrosoftSignIn",
+                    o =>
+                    {
+                        o.ConsolePrefix = "Api";
+                    });
+                services.AddSingleton<IJobLeadership>(new AlwaysHolderLeadership());
+            });
+
+        await using var scope = host.Scope();
+        Assert.NotNull(scope.ServiceProvider.GetRequiredService<IMicrosoftGraphClient>());
+        var result = await scope.ServiceProvider.GetRequiredService<MsSync>().RunOnceAsync();
+
+        Assert.Equal(MicrosoftSyncOutcome.Off, result.Outcome);
+    }
+
+    [Fact]
     public async Task An_address_at_another_company_domain_is_refused_before_the_account_is_written()
     {
         await using var host = await HostAsync(configure: o => o.AllowedDomains = ["example.test"]);
@@ -316,6 +367,61 @@ public class MicrosoftSignInTests
         Assert.Equal(DirectorySyncFailure.Graph, result.Failure);
         var users = scope.ServiceProvider.GetRequiredService<UserManager<StringUser>>();
         Assert.False(await users.IsLockedOutAsync((await users.FindByIdAsync(userId))!));
+    }
+
+    [Fact]
+    public async Task A_role_made_from_microsoft_that_no_assignment_names_any_more_is_listed_on_the_result_and_kept()
+    {
+        var graph = new FakeGraph();
+        await using var host = await HostAsync(graph: graph, sync: true, configure: o => o.FullAccessRole = "Admin");
+        await using (var scope = host.Scope())
+        {
+            var roles = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<string>>>();
+            var role = new IdentityRole<string>("Retired") { Id = Guid.NewGuid().ToString("D") };
+            Assert.True((await roles.CreateAsync(role)).Succeeded);
+            Assert.True((await roles.AddClaimAsync(role, new Claim("source", "microsoft"))).Succeeded);
+        }
+
+        // Nobody is assigned in Microsoft any more, so the role made from it is no longer named.
+        graph.Snapshot = Directory();
+
+        await using var run = host.Scope();
+        var result = await run.ServiceProvider.GetRequiredService<MsSync>().RunOnceAsync();
+
+        Assert.Equal("Retired", Assert.Single(result.RolesNotInMicrosoft));
+        Assert.Contains(result.Problems, problem => problem.Code == MicrosoftSyncProblems.RoleNotInMicrosoft && problem.Subject == "Retired");
+        await using var check = host.Scope();
+        Assert.True(await check.ServiceProvider.GetRequiredService<RoleManager<IdentityRole<string>>>().RoleExistsAsync("Retired"));
+    }
+
+    [Fact]
+    public async Task A_handshake_whose_sign_in_throws_still_removes_its_cookie()
+    {
+        var log = new StaffProfileLog();
+        await using var host = await HostAsync(profileLog: log, profileFailsFor: "ana@example.test");
+        var handshake = new FakeHandshake { Principal = Principal("ana@example.test", Ana, ["Api.Admin"]) };
+
+        await using var scope = host.Scope();
+        await Assert.ThrowsAsync<MicrosoftStaffProfileException>(() => Service(scope).CompleteAsync(Context(handshake)));
+
+        Assert.Equal(new List<string?> { "MicrosoftSignIn.Cookie" }, handshake.SignedOutSchemes);
+    }
+
+    [Fact]
+    public async Task A_refused_sign_in_is_logged_at_warning_with_its_code_and_object_id_and_never_the_address()
+    {
+        var logger = new CapturingLogger<MsSignIn>();
+        await using var host = await HostAsync(configure: o => o.AllowedDomains = ["example.test"], signInLogger: logger);
+
+        await using var scope = host.Scope();
+        var outcome = await Service(scope).CompleteAsync(Principal("ana@other.test", Ana, ["Api.Admin"]));
+
+        Assert.False(outcome.IsAccepted);
+        var entry = Assert.Single(logger.Entries);
+        Assert.Equal(LogLevel.Warning, entry.Level);
+        Assert.Contains(outcome.RefusalCode!, entry.Message, StringComparison.Ordinal);
+        Assert.Contains(Ana.ToString("D"), entry.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("ana@other.test", entry.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -573,7 +679,8 @@ public class MicrosoftSignInTests
         Action<MicrosoftSignInOptions>? configure = null,
         IMicrosoftEmergencyAccounts<string>? emergency = null,
         StaffProfileLog? profileLog = null,
-        string? profileFailsFor = null)
+        string? profileFailsFor = null,
+        ILogger<MsSignIn>? signInLogger = null)
     {
         var log = profileLog ?? new StaffProfileLog();
         var settings = new List<KeyValuePair<string, string?>>
@@ -602,6 +709,10 @@ public class MicrosoftSignInTests
                 // The app's profile replaces the no-op default, because the registration after it is the one that resolves.
                 services.AddScoped<IMicrosoftStaffProfile<StringUser, string>>(provider =>
                     new FakeStaffProfile(provider.GetRequiredService<StringDb>(), log, profileFailsFor));
+                if (signInLogger is not null)
+                {
+                    services.AddSingleton(signInLogger);
+                }
                 services.AddSingleton<IMicrosoftGraphClient>(graph ?? new FakeGraph());
                 services.AddSingleton<IJobLeadership>(new AlwaysHolderLeadership());
                 if (emergency is not null)

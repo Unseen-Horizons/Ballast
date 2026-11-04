@@ -26,6 +26,7 @@ translate. The package's short example is in [src/Ballast.Auth/README.md](../src
 | `IAuthAudit` | Where the library's audit rows go. The app writes them in its own table. |
 | `IAuthNewAccount<TUser>` | The app's own rows for a new account (for example a wallet). Optional. |
 | `IGoogleIdTokenValidator` | Checks a Google ID token. The default calls Google; a test replaces it. |
+| `IGoogleTokenVerifier` | The signature check the validator calls: it returns the payload Google signed. The default is `GoogleJsonWebSignatureVerifier` (Google's library). A test replaces it with a fake. |
 
 ## AuthOptions
 
@@ -70,7 +71,7 @@ The other names are listed in `AuthClaimNames.cs`.
 | `RequiredLength` | 12 | The shortest password. |
 | `RequireDigit` | `true` | A digit is needed. |
 | `RequireUppercase` | `true` | An upper-case letter is needed. |
-| `RequireLowercase` | `false` | A lower-case letter is needed. |
+| `RequireLowercase` | `true` | A lower-case letter is needed. The default matches Identity's own. |
 | `RequireNonAlphanumeric` | `true` | A symbol is needed. |
 | `RequiredUniqueChars` | 1 | The number of distinct characters needed. |
 
@@ -211,8 +212,12 @@ makes a link and sends it through `EmailService`; `RedeemAsync(secret, purpose, 
 - **`UnlinkAsync(userId)`.** Removes the Google login. Refused when the account has no password, because it would have
   no way to sign in.
 - A locked account is answered with `INVALID_CREDENTIALS`, the same answer the password path gives.
-- The token is checked with `GoogleJsonWebSignature.ValidateAsync` and the `WebClientId` audience. An invalid token is
-  `GOOGLE_TOKEN_INVALID`. A network failure is `GOOGLE_UNREACHABLE`, never a bad token.
+- The token's signature is checked by the `IGoogleTokenVerifier` (Google's library by default), for the `WebClientId`
+  audience. The validator then checks what came back: the issuer must be Google's (`accounts.google.com`, in either form),
+  the audience must be this app's, and the expiry must be in the future. A token that fails one of these is refused as not a
+  Google token. The email-verified flag comes through, and the sign-in refuses an unverified address
+  (`GOOGLE_EMAIL_UNVERIFIED`). An invalid token is `GOOGLE_TOKEN_INVALID`. A network failure is `GOOGLE_UNREACHABLE`, never a
+  bad token.
 
 ## Microsoft staff sign-in
 
@@ -243,8 +248,11 @@ An app with its own routes calls the same methods the library's routes call, so 
 - `MicrosoftSignInStart.Decide(options, loginHint, completePath)` returns a `MicrosoftStartDecision`. When its `RedirectUrl`
   is set, redirect there. Otherwise challenge its `Scheme` with its `Properties`. `completePath` is the app's own complete
   route, which the challenge returns to.
-- `MicrosoftSignInService.CompleteAsync(HttpContext, ct)` reads the handshake cookie, removes it in every case, and returns
-  the sign-in page's address (`?code=` or `?error=`). Redirect to it. The library's complete route is one line of this.
+- `MicrosoftSignInService.CompleteAsync(HttpContext, ct)` reads the handshake cookie, removes it in every case (a refusal, a
+  success, and a sign-in that throws, since the removal is in a `finally`), and returns the sign-in page's address
+  (`?code=` or `?error=`). Redirect to it. The library's complete route is one line of this.
+- Every refusal of a Microsoft sign-in is logged at Warning, with its refusal code and the Microsoft object id. It never
+  logs the address, a token or a name.
 
 Both are public and need no database for `Decide`. `AddBallastMicrosoftSignIn` registers the service.
 
@@ -360,7 +368,8 @@ The library never schedules it itself. The app must register the job lock before
 - In `One` mode, a person with several roles is listed as `MULTIPLE_ROLES` and left as they are.
 - A person with no name, or no address, is listed and left as they are.
 - An address held by another account is listed as `ADDRESS_TAKEN`. The account is updated, but keeps its old address.
-- A role that Microsoft gave and no longer does is listed as `ROLE_NOT_IN_MICROSOFT`. The role is never deleted.
+- A role that Microsoft gave and no longer does is listed as `ROLE_NOT_IN_MICROSOFT`. The role is never deleted. The same
+  list is on the result as `RolesNotInMicrosoft`, so an admin page can show it without reading the problems.
 - The sync never creates an account. The first sign-in does that.
 - Emergency accounts are left out entirely: not switched off, not applied, not counted in the looks-wrong check.
 
@@ -395,8 +404,9 @@ locks the account until a later sync switches it on, and ends its sessions.
   `PasswordSignInBy` modes, the admin password reset, and the staff profile hook: its three calls, the create rollback,
   the per-person rollback in a sync, and a key the app sets.
 - The reset's audit row names no administrator, and a reset does not lift a lockout.
-- `MicrosoftSignInService` and `MicrosoftDirectorySync` take the profile hook as a new constructor parameter. An app that
-  builds them by hand, rather than from dependency injection, must pass it.
+- `MicrosoftSignInService` and `MicrosoftDirectorySync` take the profile hook as a new constructor parameter, and
+  `MicrosoftSignInService` also takes a logger. `GoogleIdTokenValidator` takes the verifier. An app that builds these by
+  hand, rather than from dependency injection, must pass them.
 - They do not run the HTTP routes end to end, and they do not test the Graph client's paging or throttling against a
   live or fake HTTP server. Those are reviewed, not yet tested.
 - `IssuedSession` is the exchange's body. An app's `LoginResponse` may also carry a `user` object, so an app that keeps that body calls `ExchangeAsync` from its own endpoint.

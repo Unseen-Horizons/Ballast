@@ -289,7 +289,7 @@ public class GoogleSignInTests
     [Fact]
     public async Task Without_a_web_client_id_the_validator_answers_not_configured_and_the_server_still_starts()
     {
-        var validator = new GoogleIdTokenValidator(new AuthOptions(), new AuthGoogleOptions(), NullLogger<GoogleIdTokenValidator>.Instance);
+        var validator = new GoogleIdTokenValidator(new AuthOptions(), new AuthGoogleOptions(), new GoogleJsonWebSignatureVerifier(), NullLogger<GoogleIdTokenValidator>.Instance);
 
         var error = await Assert.ThrowsAsync<AppException>(() => validator.ValidateAsync("anything"));
 
@@ -303,6 +303,7 @@ public class GoogleSignInTests
         var validator = new GoogleIdTokenValidator(
             new AuthOptions(),
             new AuthGoogleOptions { WebClientId = "test-web-client" },
+            new GoogleJsonWebSignatureVerifier(),
             NullLogger<GoogleIdTokenValidator>.Instance);
 
         Assert.Null(await validator.ValidateAsync("not-a-token"));

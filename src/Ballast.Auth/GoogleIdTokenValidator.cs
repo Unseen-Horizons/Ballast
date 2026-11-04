@@ -14,18 +14,23 @@ namespace Ballast.Auth;
 /// </summary>
 public sealed class GoogleIdTokenValidator : IGoogleIdTokenValidator
 {
+    private static readonly string[] GoogleIssuers = ["accounts.google.com", "https://accounts.google.com"];
+
     private readonly AuthOptions _auth;
     private readonly AuthGoogleOptions _google;
+    private readonly IGoogleTokenVerifier _verifier;
     private readonly ILogger<GoogleIdTokenValidator> _logger;
 
     /// <summary>Creates the validator.</summary>
     /// <param name="auth">The sign-in options, whose <see cref="AuthOptions.Failures"/> give the refusals.</param>
     /// <param name="google">The Google settings, with the Web client id.</param>
+    /// <param name="verifier">Checks the token's signature with Google's keys. The default is <see cref="GoogleJsonWebSignatureVerifier"/>.</param>
     /// <param name="logger">The logger. It logs the reason a token was refused, never the token.</param>
-    public GoogleIdTokenValidator(AuthOptions auth, AuthGoogleOptions google, ILogger<GoogleIdTokenValidator> logger)
+    public GoogleIdTokenValidator(AuthOptions auth, AuthGoogleOptions google, IGoogleTokenVerifier verifier, ILogger<GoogleIdTokenValidator> logger)
     {
         _auth = auth;
         _google = google;
+        _verifier = verifier;
         _logger = logger;
     }
 
@@ -42,11 +47,31 @@ public sealed class GoogleIdTokenValidator : IGoogleIdTokenValidator
 
         try
         {
-            var payload = await GoogleJsonWebSignature.ValidateAsync(idToken, new GoogleJsonWebSignature.ValidationSettings { Audience = [clientId] });
+            var payload = await _verifier.VerifyAsync(idToken, new GoogleJsonWebSignature.ValidationSettings { Audience = [clientId] });
 
             if (string.IsNullOrWhiteSpace(payload.Subject) || string.IsNullOrWhiteSpace(payload.Email))
             {
                 _logger.LogInformation("Google ID token rejected: no subject or email in the payload.");
+                return null;
+            }
+
+            // The checks Google's library makes are made here too, on what came back, so a token from another issuer, for another app,
+            // or past its expiry is refused whatever verifier answered.
+            if (payload.Issuer is null || !GoogleIssuers.Contains(payload.Issuer, StringComparer.Ordinal))
+            {
+                _logger.LogInformation("Google ID token rejected: it was not issued by Google.");
+                return null;
+            }
+
+            if (payload.AudienceAsList is null || !payload.AudienceAsList.Contains(clientId, StringComparer.Ordinal))
+            {
+                _logger.LogInformation("Google ID token rejected: it is not for this app.");
+                return null;
+            }
+
+            if (payload.ExpirationTimeSeconds is not { } expires || expires <= DateTimeOffset.UtcNow.ToUnixTimeSeconds())
+            {
+                _logger.LogInformation("Google ID token rejected: it has expired.");
                 return null;
             }
 

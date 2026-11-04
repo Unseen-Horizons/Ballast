@@ -666,6 +666,20 @@ public abstract class AuthFlowSuite<TUser, TKey, TRefresh>
     }
 
     [Fact]
+    public async Task A_password_with_no_lower_case_letter_is_refused_by_default_as_Identity_refuses_it()
+    {
+        await using var harness = await StartAsync();
+        var userId = await harness.CreateUserAsync(Email, Password);
+
+        await using var scope = harness.Scope();
+        var error = await RefuseAsync(() => Accounts(scope).ResetPasswordAsync(userId, "RESET-HORSE-45!"));
+
+        Assert.Equal("UNCLASSIFIED", error.Code);
+        Assert.Equal(400, error.StatusCode);
+        Assert.Contains("lowercase", error.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task An_admin_reset_refuses_a_password_that_breaks_the_rules_and_keeps_the_old_one()
     {
         await using var harness = await StartAsync();
