@@ -175,11 +175,18 @@ ask the developer to register it as an emergency account. The directory sync nev
 a change to it, and never counts it when it decides whether to stop a run. A Microsoft sign-in never links that account to a
 Microsoft login and never changes it. Keep its password in a safe place, not in the repository.
 
-## 12. Shared computers
+## 12. The app's own profile table
+
+Some apps keep a row of their own for each staff member. The developer sets that up in the app's code, and nothing is needed
+in Entra for it. When the row is written together with the account, a sign-in that cannot write it creates no account, so
+no half-made account is left behind. When the directory sync cannot write it for one person, that person's change is undone,
+the rest of the run goes on, and the problem is listed as `PROFILE_HOOK_FAILED` (section 14).
+
+## 13. Shared computers
 
 Sign out at the end of a session, and use a private window on a shared computer, so the next person cannot reuse the session.
 
-## 13. When something fails
+## 14. When something fails
 
 The sign-in page shows one sentence per refusal. The page's address carries the refusal in `error`, and Microsoft's own
 code, when there is one, in `ms`. Neither carries Microsoft's message.
@@ -199,5 +206,6 @@ code, when there is one, in `ms`. Neither carries Microsoft's message.
 | `SIGNIN_CODE_INVALID` | The one-time code is used, expired, or its account was switched off | Sign in again |
 
 The sync's problems are listed to the administrator and never applied: `GROUP_ASSIGNMENT`, `NAME_MISSING`, `NO_ADDRESS`,
-`ADDRESS_TAKEN`, `MULTIPLE_ROLES`, `ROLE_NOT_IN_MICROSOFT`, `RIDER_ROLE` and `BAD_ROLE_VALUE`. A run that would switch off
-every linked account is stopped and writes nothing. Check the tenant, the app roles and the assignments in Entra first.
+`ADDRESS_TAKEN`, `MULTIPLE_ROLES`, `ROLE_NOT_IN_MICROSOFT`, `RIDER_ROLE` and `BAD_ROLE_VALUE`. `PROFILE_HOOK_FAILED` means the
+app's own row for one person could not be written (section 12): that person's change was undone, and the rest of the run went
+on. A run that would switch off every linked account is stopped and writes nothing. Check the tenant, the app roles and the assignments in Entra first.

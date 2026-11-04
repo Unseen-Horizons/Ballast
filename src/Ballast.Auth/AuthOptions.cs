@@ -85,6 +85,12 @@ public sealed class AuthOptions
     public AuthPasswordSignInMode PasswordSignIn { get; set; } = AuthPasswordSignInMode.All;
 
     /// <summary>
+    /// What a password sign-in takes to find the account: the account's e-mail address (default), or its user name (<see cref="AuthPasswordSignInIdentifier.UserName"/>),
+    /// for an app whose people sign in with a name. The check, the lockout, the audit and the hashing time do not depend on it.
+    /// </summary>
+    public AuthPasswordSignInIdentifier PasswordSignInBy { get; set; } = AuthPasswordSignInIdentifier.Email;
+
+    /// <summary>
     /// The one role that <see cref="AuthPasswordSignInMode.OwnerOnly"/> admits. Required in that mode, and ignored otherwise. The
     /// library does not know which role an app means by it.
     /// </summary>
@@ -187,6 +193,11 @@ public sealed class AuthOptions
         if (PasswordSignIn == AuthPasswordSignInMode.OwnerOnly && string.IsNullOrWhiteSpace(PrivilegedRoleName))
         {
             throw new InvalidOperationException("PasswordSignIn is OwnerOnly, so PrivilegedRoleName must name the role that may sign in.");
+        }
+
+        if (!Enum.IsDefined(PasswordSignInBy))
+        {
+            throw new InvalidOperationException("PasswordSignInBy must be Email or UserName.");
         }
 
         if (Password.RequiredLength < 1 || Password.RequiredUniqueChars < 1)

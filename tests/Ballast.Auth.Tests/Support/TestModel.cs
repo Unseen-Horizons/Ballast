@@ -33,6 +33,21 @@ public sealed class IntRefresh : AuthRefreshTokenBase<int, IntUser>
 }
 
 /// <summary>
+/// An int-keyed user whose key the app sets itself, from its own profile table, and the database does not generate. This is how Chistify maps
+/// its Identity users (AspNetUsers.Id has no identity).
+/// </summary>
+public sealed class ManualKeyUser : IdentityUser<int>, IAuthProfile
+{
+    /// <inheritdoc />
+    public string FullName { get; set; } = string.Empty;
+}
+
+/// <summary>A refresh token row for the app-keyed user.</summary>
+public sealed class ManualKeyRefresh : AuthRefreshTokenBase<int, ManualKeyUser>
+{
+}
+
+/// <summary>
 /// The test database context. It holds Identity, the refresh tokens (mapped by the library) and the audit rows. The refresh token entity is
 /// a parameter, so the same context serves both key types.
 /// </summary>
@@ -61,6 +76,13 @@ public sealed class AuthTestDb<TUser, TKey, TRefresh> : IdentityDbContext<TUser,
     protected override void OnModelCreating(ModelBuilder builder)
     {
         base.OnModelCreating(builder);
+
+        // The app sets this user's key itself, so the database must not generate it.
+        if (typeof(TUser) == typeof(ManualKeyUser))
+        {
+            builder.Entity<ManualKeyUser>().Property(user => user.Id).ValueGeneratedNever();
+        }
+
         builder.ApplyRefreshTokenModel<TRefresh, TKey, TUser>();
     }
 }

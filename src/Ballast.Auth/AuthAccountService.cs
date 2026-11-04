@@ -137,6 +137,58 @@ public sealed class AuthAccountService<TUser, TKey, TRefresh, TContext>
         await _db.SaveChangesAsync(ct);
     }
 
+    /// <summary>
+    /// An admin's password reset: the new password replaces the stored one, the security stamp changes so the access tokens already out stop at
+    /// their next request, every live refresh token of the user is revoked, and the reset is audited. The admin's own permission is the app's to
+    /// check before it calls this. The reset does not lift a lockout: a locked account stays locked until the lockout ends.
+    /// </summary>
+    /// <param name="userId">The account to reset.</param>
+    /// <param name="newPassword">The new password. The password rules apply; the app checks its input and answers its own refusal for a blank one.</param>
+    /// <param name="ct">Cancels the call.</param>
+    /// <exception cref="ArgumentException"><paramref name="newPassword"/> is null, empty or blank.</exception>
+    /// <exception cref="AppException">
+    /// The user does not exist (<see cref="AuthFailures.UserNotFound"/>), a Microsoft account (<see cref="AuthFailures.MicrosoftAccount"/>), an
+    /// account with no password (<see cref="AuthFailures.NoPasswordAccount"/>), or Identity refused the password (the
+    /// <see cref="AuthFailures.Unclassified"/> code, with Identity's words as the message).
+    /// </exception>
+    public async Task ResetPasswordAsync(TKey userId, string newPassword, CancellationToken ct = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(newPassword);
+        var user = await _users.FindByIdAsync(AuthKey.Text(userId))
+            ?? throw _options.Failures.UserNotFound.ToException();
+
+        if (await IsMicrosoftAccountAsync(user))
+        {
+            throw _options.Failures.MicrosoftAccount.ToException();
+        }
+
+        // Refused, as the app's own reset refuses one: an admin does not give an account without a password its first one.
+        if (!await _users.HasPasswordAsync(user))
+        {
+            throw _options.Failures.NoPasswordAccount.ToException();
+        }
+
+        // A reset token is made and used at once, so the password rules and the hashing run exactly as a change does, with no current password.
+        var token = await _users.GeneratePasswordResetTokenAsync(user);
+        var reset = await _users.ResetPasswordAsync(user, token, newPassword);
+        if (!reset.Succeeded)
+        {
+            throw Unclassified(reset.Errors);
+        }
+
+        var stamp = await _users.UpdateSecurityStampAsync(user);
+        if (!stamp.Succeeded)
+        {
+            throw Unclassified(stamp.Errors);
+        }
+
+        var id = AuthKey.Text(user.Id);
+        _audit.Add(new AuthAuditEntry(id, "PasswordReset", "User", id, _time.GetUtcNow().UtcDateTime));
+        await _db.SaveChangesAsync(ct);
+
+        await _sessions.RevokeAllAsync(user.Id, ct);
+    }
+
     private async Task<bool> IsMicrosoftAccountAsync(TUser user) =>
         (await _users.GetLoginsAsync(user)).Any(l => l.LoginProvider == AuthProviders.Microsoft);
 

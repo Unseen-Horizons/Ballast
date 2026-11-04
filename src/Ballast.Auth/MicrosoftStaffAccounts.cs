@@ -45,6 +45,7 @@ internal sealed class MicrosoftStaffAccounts<TUser, TKey, TRole, TRefresh, TCont
     private readonly RoleManager<TRole> _roles;
     private readonly AuthSessionService<TUser, TKey, TRefresh, TContext> _sessions;
     private readonly IAuthAudit _audit;
+    private readonly IMicrosoftStaffProfile<TUser, TKey> _profile;
     private readonly TimeProvider _time;
 
     /// <summary>Creates the writer.</summary>
@@ -53,12 +54,14 @@ internal sealed class MicrosoftStaffAccounts<TUser, TKey, TRole, TRefresh, TCont
         RoleManager<TRole> roles,
         AuthSessionService<TUser, TKey, TRefresh, TContext> sessions,
         IAuthAudit audit,
+        IMicrosoftStaffProfile<TUser, TKey> profile,
         TimeProvider time)
     {
         _users = users;
         _roles = roles;
         _sessions = sessions;
         _audit = audit;
+        _profile = profile;
         _time = time;
     }
 
@@ -124,10 +127,11 @@ internal sealed class MicrosoftStaffAccounts<TUser, TKey, TRole, TRefresh, TCont
     }
 
     /// <summary>
-    /// The new account for a person: the address as sign-in name and email, no password, the roles and the Microsoft login. Returns null when
-    /// Identity refused it because another account has the name or the address (a lost race): the caller looks the account up again.
+    /// The new account for a person: the address as sign-in name and email, no password, the roles and the Microsoft login. The profile hook
+    /// runs first, before the insert, and may set the account's key. Returns null when Identity refused it because another account has the name
+    /// or the address (a lost race): the caller looks the account up again.
     /// </summary>
-    public async Task<TUser?> CreateAsync(MicrosoftPerson person, IReadOnlyList<string> roles)
+    public async Task<TUser?> CreateAsync(MicrosoftPerson person, IReadOnlyList<string> roles, CancellationToken ct = default)
     {
         var user = new TUser
         {
@@ -136,6 +140,8 @@ internal sealed class MicrosoftStaffAccounts<TUser, TKey, TRole, TRefresh, TCont
             EmailConfirmed = true,
             FullName = $"{person.GivenName} {person.Surname}",
         };
+
+        await RunHookAsync(person.Address, () => _profile.CreatingAsync(user, person, ct));
 
         var created = await _users.CreateAsync(user);
         if (!created.Succeeded)
@@ -159,9 +165,10 @@ internal sealed class MicrosoftStaffAccounts<TUser, TKey, TRole, TRefresh, TCont
 
     /// <summary>
     /// Brings a linked account to the person's current name, address and roles, and switches it on when it was switched off. The address is
-    /// kept, not changed, when another account holds it. Returns true when anything changed.
+    /// kept, not changed, when another account holds it. The profile hook runs after a name, address or role change. Returns true when anything
+    /// changed.
     /// </summary>
-    public async Task<bool> ApplyAsync(TUser user, MicrosoftPerson person, IReadOnlyList<string> roles)
+    public async Task<bool> ApplyAsync(TUser user, MicrosoftPerson person, IReadOnlyList<string> roles, CancellationToken ct = default)
     {
         var now = _time.GetUtcNow();
         List<string> changes = [];
@@ -207,6 +214,13 @@ internal sealed class MicrosoftStaffAccounts<TUser, TKey, TRole, TRefresh, TCont
             changes.Add("roles");
         }
 
+        // The profile follows a name, address or role change. A switch-on alone does not reach it.
+        var profileChanged = changes.Count > 0;
+        if (profileChanged)
+        {
+            await RunHookAsync(person.Address, () => _profile.AppliedAsync(user, person, ct));
+        }
+
         var switchingOn = MicrosoftStaffMarks.IsSwitchedOff(user.LockoutEnd, now);
         if (switchingOn)
         {
@@ -229,9 +243,9 @@ internal sealed class MicrosoftStaffAccounts<TUser, TKey, TRole, TRefresh, TCont
 
     /// <summary>
     /// Switches an account off: no roles, locked out until further notice, its sessions ended. The sign-in refuses a locked account, and the
-    /// sync turns it back on when Microsoft lets the person in again.
+    /// sync turns it back on when Microsoft lets the person in again. The profile hook runs after the switch-off.
     /// </summary>
-    public async Task SwitchOffAsync(TUser user)
+    public async Task SwitchOffAsync(TUser user, CancellationToken ct = default)
     {
         var roles = await _users.GetRolesAsync(user);
         if (roles.Count > 0)
@@ -243,6 +257,7 @@ internal sealed class MicrosoftStaffAccounts<TUser, TKey, TRole, TRefresh, TCont
         ThrowIfFailed(await _users.SetLockoutEndDateAsync(user, DateTimeOffset.MaxValue), "Could not lock the account");
 
         await EndSessionsAsync(user);
+        await RunHookAsync(user.Email ?? AuthKey.Text(user.Id), () => _profile.SwitchedOffAsync(user, ct));
         Audit(user.Id, "MicrosoftAccountSwitchedOff");
     }
 
@@ -276,6 +291,20 @@ internal sealed class MicrosoftStaffAccounts<TUser, TKey, TRole, TRefresh, TCont
         }
 
         return typeof(TKey) == typeof(Guid) ? (TKey)(object)Guid.NewGuid() : default!;
+    }
+
+    // A hook's own failure is wrapped, so the caller sees that the write it belonged to failed. Wrapping also keeps an Identity or database
+    // error from the hook from being taken for a lost race on the create. A cancellation passes through unchanged.
+    private static async Task RunHookAsync(string subject, Func<Task> hook)
+    {
+        try
+        {
+            await hook();
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            throw new MicrosoftStaffProfileException(subject, ex);
+        }
     }
 
     private static void ThrowIfFailed(IdentityResult result, string what)

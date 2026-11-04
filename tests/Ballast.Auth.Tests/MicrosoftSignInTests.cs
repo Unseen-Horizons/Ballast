@@ -10,10 +10,12 @@ using Ballast.Jobs;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Ballast.Auth.Tests;
 
+using IntSignIn = MicrosoftSignInService<ManualKeyUser, int, IdentityRole<int>, ManualKeyRefresh, AuthTestDb<ManualKeyUser, int, ManualKeyRefresh>>;
 using MsSignIn = MicrosoftSignInService<StringUser, string, IdentityRole<string>, StringRefresh, AuthTestDb<StringUser, string, StringRefresh>>;
 using MsSync = MicrosoftDirectorySync<StringUser, string, IdentityRole<string>, StringRefresh, AuthTestDb<StringUser, string, StringRefresh>>;
 using StringDb = AuthTestDb<StringUser, string, StringRefresh>;
@@ -77,6 +79,68 @@ internal sealed class FakeHandshake : IAuthenticationService
     /// <inheritdoc />
     public Task SignInAsync(HttpContext context, string? scheme, ClaimsPrincipal principal, AuthenticationProperties? properties) =>
         throw new NotSupportedException();
+}
+
+/// <summary>What the staff profile hook did, in order, and whether the account was already stored when the create hook ran.</summary>
+internal sealed class StaffProfileLog
+{
+    /// <summary>The calls, as the hook's name and the subject.</summary>
+    public List<string> Calls { get; } = [];
+
+    /// <summary>Whether the account was already in the database when the create hook ran, or null when it has not run.</summary>
+    public bool? StoredWhenCreating { get; set; }
+}
+
+/// <summary>The app's profile of a staff member for the string-keyed tests: it records each call, and refuses the one address it is told to.</summary>
+internal sealed class FakeStaffProfile(StringDb db, StaffProfileLog log, string? failFor) : IMicrosoftStaffProfile<StringUser, string>
+{
+    /// <inheritdoc />
+    public async Task CreatingAsync(StringUser user, MicrosoftPerson person, CancellationToken ct)
+    {
+        log.Calls.Add("creating:" + person.Address);
+        log.StoredWhenCreating = await db.Users.AnyAsync(stored => stored.Id == user.Id, ct);
+        if (RefusalFor(person.Address) is { } refusal)
+        {
+            throw refusal;
+        }
+    }
+
+    /// <inheritdoc />
+    public Task AppliedAsync(StringUser user, MicrosoftPerson person, CancellationToken ct)
+    {
+        log.Calls.Add("applied:" + person.Address);
+        return RefusalFor(person.Address) is { } refusal ? Task.FromException(refusal) : Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task SwitchedOffAsync(StringUser user, CancellationToken ct)
+    {
+        log.Calls.Add("switchedoff:" + user.Email);
+        return Task.CompletedTask;
+    }
+
+    private InvalidOperationException? RefusalFor(string address) =>
+        address == failFor ? new InvalidOperationException("The app's own profile table refused " + address + ".") : null;
+}
+
+/// <summary>The app's profile for the int-keyed test: it sets the account's key from its own table, before the insert.</summary>
+internal sealed class ManualKeyProfile : IMicrosoftStaffProfile<ManualKeyUser, int>
+{
+    /// <summary>The key the app assigns.</summary>
+    public const int AssignedId = 1001;
+
+    /// <inheritdoc />
+    public Task CreatingAsync(ManualKeyUser user, MicrosoftPerson person, CancellationToken ct)
+    {
+        user.Id = AssignedId;
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
+    public Task AppliedAsync(ManualKeyUser user, MicrosoftPerson person, CancellationToken ct) => Task.CompletedTask;
+
+    /// <inheritdoc />
+    public Task SwitchedOffAsync(ManualKeyUser user, CancellationToken ct) => Task.CompletedTask;
 }
 
 /// <summary>Microsoft staff sign-in on SQL Server: the one-time codes, the recheck at the exchange, the refusals and the directory sync's stop.</summary>
@@ -242,6 +306,7 @@ public class MicrosoftSignInTests
             scope.ServiceProvider.GetRequiredService<AuthSessionService<StringUser, string, StringRefresh, StringDb>>(),
             scope.ServiceProvider.GetRequiredService<IAuthAudit>(),
             scope.ServiceProvider.GetRequiredService<IMicrosoftEmergencyAccounts<string>>(),
+            scope.ServiceProvider.GetRequiredService<IMicrosoftStaffProfile<StringUser, string>>(),
             host.Time,
             scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<MsSync>>());
 
@@ -358,6 +423,138 @@ public class MicrosoftSignInTests
         return new DefaultHttpContext { RequestServices = services.BuildServiceProvider() };
     }
 
+    [Fact]
+    public async Task A_new_staff_member_is_offered_to_the_profile_hook_before_the_insert_and_is_not_stored_yet()
+    {
+        var log = new StaffProfileLog();
+        await using var host = await HostAsync(configure: o => o.FullAccessRole = "Admin", profileLog: log);
+
+        await using (var scope = host.Scope())
+        {
+            var outcome = await Service(scope).CompleteAsync(Principal("ana@example.test", Ana, ["Api.Admin"]));
+            Assert.True(outcome.IsAccepted);
+        }
+
+        Assert.Equal("creating:ana@example.test", Assert.Single(log.Calls));
+        Assert.False(log.StoredWhenCreating);
+    }
+
+    [Fact]
+    public async Task A_name_change_at_sign_in_is_offered_to_the_profile_hook_once_and_an_unchanged_sign_in_is_not()
+    {
+        var log = new StaffProfileLog();
+        await using var host = await HostAsync(configure: o => o.FullAccessRole = "Admin", profileLog: log);
+        await MicrosoftAccountAsync(host, "ana@example.test", Ana);
+
+        await using (var scope = host.Scope())
+        {
+            var outcome = await Service(scope).CompleteAsync(Principal("ana@example.test", Ana, ["Api.Admin"]));
+            Assert.True(outcome.IsAccepted);
+        }
+
+        await using (var scope = host.Scope())
+        {
+            var outcome = await Service(scope).CompleteAsync(Principal("ana@example.test", Ana, ["Api.Admin"]));
+            Assert.True(outcome.IsAccepted);
+        }
+
+        Assert.Equal("applied:ana@example.test", Assert.Single(log.Calls));
+        await using var check = host.Scope();
+        var user = await check.ServiceProvider.GetRequiredService<UserManager<StringUser>>().FindByLoginAsync(AuthProviders.Microsoft, Ana.ToString("D"));
+        Assert.Equal("Ana Horvat", user!.FullName);
+    }
+
+    [Fact]
+    public async Task A_staff_member_who_leaves_the_directory_is_switched_off_and_the_hook_is_told_with_that_account()
+    {
+        var graph = new FakeGraph();
+        var log = new StaffProfileLog();
+        await using var host = await HostAsync(graph: graph, sync: true, configure: o => o.FullAccessRole = "Admin", profileLog: log);
+        await MicrosoftAccountAsync(host, "ana@example.test", Ana);
+        await MicrosoftAccountAsync(host, "bo@example.test", Bo);
+
+        // Ana is still assigned, and Bo has left the directory, so the run switches Bo off.
+        graph.Snapshot = Directory((Ana, "ana@example.test", "Ana", "Horvat"));
+
+        await using var scope = host.Scope();
+        var result = await scope.ServiceProvider.GetRequiredService<MsSync>().RunOnceAsync();
+
+        Assert.Equal(MicrosoftSyncOutcome.Applied, result.Outcome);
+        Assert.Contains("switchedoff:bo@example.test", log.Calls);
+        Assert.Contains("applied:ana@example.test", log.Calls);
+        Assert.Equal(2, log.Calls.Count);
+    }
+
+    [Fact]
+    public async Task A_create_whose_profile_hook_fails_rolls_back_the_account_and_its_role_and_the_error_reaches_the_caller()
+    {
+        var log = new StaffProfileLog();
+        await using var host = await HostAsync(configure: o => o.FullAccessRole = "Admin", profileLog: log, profileFailsFor: "ana@example.test");
+
+        await using (var scope = host.Scope())
+        {
+            await Assert.ThrowsAsync<MicrosoftStaffProfileException>(() => Service(scope).CompleteAsync(Principal("ana@example.test", Ana, ["Api.Admin"])));
+        }
+
+        await using var check = host.Scope();
+        var db = check.ServiceProvider.GetRequiredService<StringDb>();
+        Assert.False(await db.Users.AnyAsync(user => user.Email == "ana@example.test"));
+        Assert.False(await db.UserRoles.AnyAsync());
+    }
+
+    [Fact]
+    public async Task A_staff_member_whose_profile_hook_fails_is_undone_alone_and_the_sync_reports_it_and_goes_on()
+    {
+        var graph = new FakeGraph();
+        var log = new StaffProfileLog();
+        await using var host = await HostAsync(graph: graph, sync: true, configure: o => o.FullAccessRole = "Admin", profileLog: log, profileFailsFor: "ana@example.test");
+        await MicrosoftAccountAsync(host, "ana@example.test", Ana);
+        await MicrosoftAccountAsync(host, "bo@example.test", Bo);
+        graph.Snapshot = Directory((Ana, "ana@example.test", "Ana", "Horvat"), (Bo, "bo@example.test", "Bo", "Kovac"));
+
+        await using var scope = host.Scope();
+        var result = await scope.ServiceProvider.GetRequiredService<MsSync>().RunOnceAsync();
+
+        Assert.Equal(MicrosoftSyncOutcome.Applied, result.Outcome);
+        var problem = Assert.Single(result.Problems);
+        Assert.Equal(MicrosoftSyncProblems.ProfileHookFailed, problem.Code);
+        Assert.Equal("ana@example.test", problem.Subject);
+
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<StringUser>>();
+        var ana = await users.FindByLoginAsync(AuthProviders.Microsoft, Ana.ToString("D"));
+        Assert.Equal("Ana Test", ana!.FullName);
+        Assert.Empty(await users.GetRolesAsync(ana));
+        var bo = await users.FindByLoginAsync(AuthProviders.Microsoft, Bo.ToString("D"));
+        Assert.Contains("Admin", await users.GetRolesAsync(bo!));
+    }
+
+    [Fact]
+    public async Task An_int_keyed_app_sets_the_account_key_in_its_hook_and_the_insert_keeps_that_key()
+    {
+        await using var host = await IntHostAsync();
+
+        await using (var scope = host.Scope())
+        {
+            var outcome = await scope.ServiceProvider.GetRequiredService<IntSignIn>()
+                .CompleteAsync(Principal("ana@example.test", Ana, ["Api.Admin"]));
+            Assert.True(outcome.IsAccepted);
+            Assert.Equal(ManualKeyProfile.AssignedId, outcome.UserId);
+        }
+
+        await using var check = host.Scope();
+        var users = check.ServiceProvider.GetRequiredService<UserManager<ManualKeyUser>>();
+        var user = await users.FindByLoginAsync(AuthProviders.Microsoft, Ana.ToString("D"));
+        Assert.NotNull(user);
+        Assert.Equal(ManualKeyProfile.AssignedId, user.Id);
+        Assert.Contains("Admin", await users.GetRolesAsync(user));
+    }
+
+    private static MicrosoftDirectorySnapshot Directory(params (Guid Id, string Address, string GivenName, string Surname)[] people) => new(
+        [new MicrosoftAppRole(AdminRole, "Api.Admin")],
+        [.. people.Select(person => new MicrosoftAssignment(person.Id, "User", AdminRole))],
+        people.ToDictionary(person => person.Id, person => new MicrosoftUser(person.Id, person.GivenName, person.Surname, person.Address, true)),
+        null);
+
     // The one-time code is the query value of the sign-in page's address.
     private static string CodeFrom(string location) => Uri.UnescapeDataString(location["/admin/login.html?code=".Length..]);
 
@@ -374,8 +571,11 @@ public class MicrosoftSignInTests
         FakeGraph? graph = null,
         bool sync = false,
         Action<MicrosoftSignInOptions>? configure = null,
-        IMicrosoftEmergencyAccounts<string>? emergency = null)
+        IMicrosoftEmergencyAccounts<string>? emergency = null,
+        StaffProfileLog? profileLog = null,
+        string? profileFailsFor = null)
     {
+        var log = profileLog ?? new StaffProfileLog();
         var settings = new List<KeyValuePair<string, string?>>
         {
             new("MicrosoftSignIn:TenantId", Tenant),
@@ -399,12 +599,40 @@ public class MicrosoftSignInTests
                         o.ConsolePrefix = "Api";
                         configure?.Invoke(o);
                     });
+                // The app's profile replaces the no-op default, because the registration after it is the one that resolves.
+                services.AddScoped<IMicrosoftStaffProfile<StringUser, string>>(provider =>
+                    new FakeStaffProfile(provider.GetRequiredService<StringDb>(), log, profileFailsFor));
                 services.AddSingleton<IMicrosoftGraphClient>(graph ?? new FakeGraph());
                 services.AddSingleton<IJobLeadership>(new AlwaysHolderLeadership());
                 if (emergency is not null)
                 {
                     services.AddSingleton(emergency);
                 }
+            });
+    }
+
+    private static async Task<Harness<ManualKeyUser, int, ManualKeyRefresh>> IntHostAsync()
+    {
+        var settings = new List<KeyValuePair<string, string?>>
+        {
+            new("MicrosoftSignIn:TenantId", Tenant),
+            new("MicrosoftSignIn:ClientId", Client),
+        };
+
+        var configuration = TestConfig.Build(settings.ToArray());
+        return await Harness<ManualKeyUser, int, ManualKeyRefresh>.CreateAsync(
+            configuration,
+            extra: services =>
+            {
+                services.AddBallastMicrosoftSignIn<ManualKeyUser, int, IdentityRole<int>, ManualKeyRefresh, AuthTestDb<ManualKeyUser, int, ManualKeyRefresh>>(
+                    configuration,
+                    "MicrosoftSignIn",
+                    o =>
+                    {
+                        o.ConsolePrefix = "Api";
+                        o.FullAccessRole = "Admin";
+                    });
+                services.AddScoped<IMicrosoftStaffProfile<ManualKeyUser, int>, ManualKeyProfile>();
             });
     }
 

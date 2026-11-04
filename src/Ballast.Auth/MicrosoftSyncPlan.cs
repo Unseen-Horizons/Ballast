@@ -27,6 +27,12 @@ public static class MicrosoftSyncProblems
 
     /// <summary>A role marked as Microsoft's no longer exists in Microsoft. It is listed, and never deleted: its permissions live here.</summary>
     public const string RoleNotInMicrosoft = "ROLE_NOT_IN_MICROSOFT";
+
+    /// <summary>
+    /// The app's Microsoft staff profile hook threw for this person. That person's change was rolled back; the other people's changes were applied.
+    /// The subject is the person's address.
+    /// </summary>
+    public const string ProfileHookFailed = "PROFILE_HOOK_FAILED";
 }
 
 /// <summary>A problem the directory sync found. <paramref name="Subject"/> is a person's address (or object id), a role name or an app role value.</summary>

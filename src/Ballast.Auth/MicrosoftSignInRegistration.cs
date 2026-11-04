@@ -56,6 +56,9 @@ public static class MicrosoftSignInRegistration
         // The app's emergency accounts. The default names none; an app registers its own, and that registration wins.
         services.TryAddScoped<IMicrosoftEmergencyAccounts<TKey>, NoMicrosoftEmergencyAccounts<TKey>>();
 
+        // The app's own profile of a staff member. The default keeps none; an app registers its own, and that registration is used.
+        services.TryAddScoped<IMicrosoftStaffProfile<TUser, TKey>, NoMicrosoftStaffProfile<TUser, TKey>>();
+
         if (microsoft.SyncEnabled)
         {
             services.AddHttpClient<IMicrosoftGraphClient, MicrosoftGraphClient>(client => client.Timeout = TimeSpan.FromSeconds(30));

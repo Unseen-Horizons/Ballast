@@ -480,6 +480,209 @@ public abstract class AuthFlowSuite<TUser, TKey, TRefresh>
         Assert.False(lockedState.CanSignIn);
     }
 
+    // A staff member whose user name is not the address, so a sign-in by name and a sign-in by address are two different lookups.
+    private const string StaffName = "ana.horvat";
+
+    private static string Identifier(AuthPasswordSignInIdentifier mode) => mode == AuthPasswordSignInIdentifier.UserName ? StaffName : Email;
+
+    private static async Task<TKey> CreateNamedUserAsync(Harness<TUser, TKey, TRefresh> harness, string userName, string email)
+    {
+        await using var scope = harness.Scope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<TUser>>();
+        var user = new TUser { UserName = userName, Email = email, FullName = "Ana Horvat" };
+        var result = await users.CreateAsync(user, Password);
+        if (!result.Succeeded)
+        {
+            throw new InvalidOperationException("Test user not created: " + string.Join(", ", result.Errors.Select(e => e.Description)));
+        }
+
+        return user.Id;
+    }
+
+    private static async Task AttemptAsync(Harness<TUser, TKey, TRefresh> harness, string identifier, string password)
+    {
+        await using var scope = harness.Scope();
+        _ = await Passwords(scope).CheckPasswordAsync(identifier, password);
+    }
+
+    private static PasswordSignInService<TUser, TKey, AuthTestDb<TUser, TKey, TRefresh>> Passwords(AsyncServiceScope scope) =>
+        scope.ServiceProvider.GetRequiredService<PasswordSignInService<TUser, TKey, AuthTestDb<TUser, TKey, TRefresh>>>();
+
+    private static AuthAccountService<TUser, TKey, TRefresh, AuthTestDb<TUser, TKey, TRefresh>> Accounts(AsyncServiceScope scope) =>
+        scope.ServiceProvider.GetRequiredService<AuthAccountService<TUser, TKey, TRefresh, AuthTestDb<TUser, TKey, TRefresh>>>();
+
+    [Fact]
+    public async Task A_name_sign_in_takes_the_user_name_and_refuses_the_address()
+    {
+        await using var harness = await StartAsync(configure: o => o.PasswordSignInBy = AuthPasswordSignInIdentifier.UserName);
+        await CreateNamedUserAsync(harness, StaffName, Email);
+
+        await using (var scope = harness.Scope())
+        {
+            var user = await Passwords(scope).CheckPasswordAsync(StaffName, Password);
+            Assert.Equal(StaffName, user.UserName);
+        }
+
+        await using var check = harness.Scope();
+        var error = await RefuseAsync(() => Passwords(check).CheckPasswordAsync(Email, Password));
+        Assert.Equal("INVALID_CREDENTIALS", error.Code);
+    }
+
+    [Fact]
+    public async Task In_the_default_address_mode_a_user_name_is_refused_and_the_address_still_works()
+    {
+        await using var harness = await StartAsync();
+        await CreateNamedUserAsync(harness, StaffName, Email);
+
+        await using var scope = harness.Scope();
+        var error = await RefuseAsync(() => Passwords(scope).CheckPasswordAsync(StaffName, Password));
+        Assert.Equal("INVALID_CREDENTIALS", error.Code);
+        Assert.NotNull(await Passwords(scope).CheckPasswordAsync(Email, Password));
+    }
+
+    [Theory]
+    [InlineData(AuthPasswordSignInIdentifier.Email)]
+    [InlineData(AuthPasswordSignInIdentifier.UserName)]
+    public async Task In_either_mode_an_unknown_identifier_and_a_wrong_password_get_the_same_answer_and_spend_one_hash(AuthPasswordSignInIdentifier mode)
+    {
+        await using var harness = await StartAsync(configure: o => o.PasswordSignInBy = mode);
+        await CreateNamedUserAsync(harness, StaffName, Email);
+        var known = Identifier(mode);
+        var unknown = mode == AuthPasswordSignInIdentifier.UserName ? "nobody.staff" : "nobody@example.test";
+
+        harness.Hashes.Calls = 0;
+        var missing = await RefuseAsync(() => AttemptAsync(harness, unknown, Password));
+        var missingHashes = harness.Hashes.Calls;
+
+        harness.Hashes.Calls = 0;
+        var wrong = await RefuseAsync(() => AttemptAsync(harness, known, "wrong-Password-1!"));
+        var wrongHashes = harness.Hashes.Calls;
+
+        Assert.Equal("INVALID_CREDENTIALS", missing.Code);
+        Assert.Equal(missing.Code, wrong.Code);
+        Assert.Equal(missing.StatusCode, wrong.StatusCode);
+        Assert.Equal(missing.Message, wrong.Message);
+        Assert.Equal(1, missingHashes);
+        Assert.Equal(1, wrongHashes);
+    }
+
+    [Theory]
+    [InlineData(AuthPasswordSignInIdentifier.Email)]
+    [InlineData(AuthPasswordSignInIdentifier.UserName)]
+    public async Task In_either_mode_five_failed_passwords_lock_the_account(AuthPasswordSignInIdentifier mode)
+    {
+        await using var harness = await StartAsync(configure: o => o.PasswordSignInBy = mode);
+        await CreateNamedUserAsync(harness, StaffName, Email);
+        var known = Identifier(mode);
+
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            _ = await RefuseAsync(() => AttemptAsync(harness, known, "wrong-Password-1!"));
+        }
+
+        var locked = await RefuseAsync(() => AttemptAsync(harness, known, Password));
+        Assert.Equal("INVALID_CREDENTIALS", locked.Code);
+        Assert.True(await CountAuditAsync(harness, "LoginFailed") >= 5);
+    }
+
+    [Fact]
+    public async Task An_admin_reset_replaces_the_password_changes_the_stamp_and_ends_every_session()
+    {
+        await using var harness = await StartAsync();
+        var userId = await harness.CreateUserAsync(Email, Password);
+        var session = await SignInAsync(harness);
+        const string resetPassword = "Reset-horse-45!";
+
+        await using (var scope = harness.Scope())
+        {
+            var stampBefore = (await scope.ServiceProvider.GetRequiredService<IAuthAccountStore>().FindAsync(TestConfig.KeyText(userId)))!.SecurityStamp;
+            await Accounts(scope).ResetPasswordAsync(userId, resetPassword);
+            var stampAfter = (await scope.ServiceProvider.GetRequiredService<IAuthAccountStore>().FindAsync(TestConfig.KeyText(userId)))!.SecurityStamp;
+            Assert.NotEqual(stampBefore, stampAfter);
+        }
+
+        var oldPassword = await RefuseAsync(() => SignInAsync(harness));
+        Assert.Equal("INVALID_CREDENTIALS", oldPassword.Code);
+
+        await using (var scope = harness.Scope())
+        {
+            Assert.NotNull(await Passwords(scope).CheckPasswordAsync(Email, resetPassword));
+        }
+
+        var refresh = await RefuseAsync(() => RefreshAsync(harness, session.RefreshToken));
+        Assert.Equal("REFRESH_TOKEN_EXPIRED", refresh.Code);
+        Assert.Equal(1, await CountAuditAsync(harness, "PasswordReset"));
+    }
+
+    [Fact]
+    public async Task An_admin_reset_refuses_an_account_with_no_password()
+    {
+        await using var harness = await StartAsync();
+        var userId = await harness.CreateUserAsync(Email, null);
+
+        await using var scope = harness.Scope();
+        var error = await RefuseAsync(() => Accounts(scope).ResetPasswordAsync(userId, Password));
+
+        Assert.Equal("NO_PASSWORD_ACCOUNT", error.Code);
+        Assert.Equal(422, error.StatusCode);
+    }
+
+    [Fact]
+    public async Task An_admin_reset_refuses_a_microsoft_account()
+    {
+        await using var harness = await StartAsync();
+        var userId = await harness.CreateUserAsync("staff@example.test", null);
+        await using (var scope = harness.Scope())
+        {
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<TUser>>();
+            var user = await users.FindByIdAsync(TestConfig.KeyText(userId)) ?? throw new InvalidOperationException("No test user.");
+            await users.AddLoginAsync(user, new UserLoginInfo(AuthProviders.Microsoft, "object-id", "Microsoft"));
+        }
+
+        await using var check = harness.Scope();
+        var error = await RefuseAsync(() => Accounts(check).ResetPasswordAsync(userId, Password));
+
+        Assert.Equal("MICROSOFT_ACCOUNT", error.Code);
+        Assert.Equal(409, error.StatusCode);
+    }
+
+    [Fact]
+    public async Task An_admin_reset_of_a_deleted_account_says_it_was_not_found()
+    {
+        await using var harness = await StartAsync();
+        var userId = await harness.CreateUserAsync(Email, Password);
+        await using (var scope = harness.Scope())
+        {
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<TUser>>();
+            var user = await users.FindByIdAsync(TestConfig.KeyText(userId)) ?? throw new InvalidOperationException("No test user.");
+            Assert.True((await users.DeleteAsync(user)).Succeeded);
+        }
+
+        await using var check = harness.Scope();
+        var error = await RefuseAsync(() => Accounts(check).ResetPasswordAsync(userId, Password));
+
+        Assert.Equal("USER_NOT_FOUND", error.Code);
+        Assert.Equal(404, error.StatusCode);
+    }
+
+    [Fact]
+    public async Task An_admin_reset_refuses_a_password_that_breaks_the_rules_and_keeps_the_old_one()
+    {
+        await using var harness = await StartAsync();
+        var userId = await harness.CreateUserAsync(Email, Password);
+
+        await using (var scope = harness.Scope())
+        {
+            var error = await RefuseAsync(() => Accounts(scope).ResetPasswordAsync(userId, "short"));
+            Assert.Equal("UNCLASSIFIED", error.Code);
+            Assert.Equal(400, error.StatusCode);
+            Assert.Contains("at least", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        var session = await SignInAsync(harness);
+        Assert.False(string.IsNullOrEmpty(session.AccessToken));
+    }
+
     private static async Task<TKey> HarnessUserIdAsync(Harness<TUser, TKey, TRefresh> harness, string email)
     {
         await using var scope = harness.Scope();

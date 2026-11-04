@@ -45,9 +45,10 @@ public sealed class PasswordSignInService<TUser, TKey, TContext>
     }
 
     /// <summary>
-    /// Checks an address and a password, and returns the user when both are right. The caller then issues the session.
+    /// Checks an identifier and a password, and returns the user when both are right. The identifier is the e-mail address or the user name,
+    /// as <see cref="AuthOptions.PasswordSignInBy"/> says. The caller then issues the session.
     /// </summary>
-    /// <param name="email">The address the person typed.</param>
+    /// <param name="identifier">The e-mail address or the user name the person typed, as <see cref="AuthOptions.PasswordSignInBy"/> names it.</param>
     /// <param name="password">The password the person typed.</param>
     /// <param name="ct">Cancels the call.</param>
     /// <returns>The signed-in user.</returns>
@@ -55,9 +56,9 @@ public sealed class PasswordSignInService<TUser, TKey, TContext>
     /// The sign-in mode is off (<see cref="AuthFailures.PasswordSignInOff"/>), or the credentials are refused
     /// (<see cref="AuthFailures.InvalidCredentials"/>). Both are the library's refusal codes.
     /// </exception>
-    public async Task<TUser> CheckPasswordAsync(string email, string password, CancellationToken ct = default)
+    public async Task<TUser> CheckPasswordAsync(string identifier, string password, CancellationToken ct = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(email);
+        ArgumentException.ThrowIfNullOrWhiteSpace(identifier);
         ArgumentNullException.ThrowIfNull(password);
 
         if (_options.PasswordSignIn == AuthPasswordSignInMode.Off)
@@ -65,7 +66,7 @@ public sealed class PasswordSignInService<TUser, TKey, TContext>
             throw _options.Failures.PasswordSignInOff.ToException();
         }
 
-        var user = await _users.FindByEmailAsync(email);
+        var user = await FindAccountAsync(identifier);
         if (user is null)
         {
             AccountEnumerationGuard.SpendPasswordHashingTime(_users, password);
@@ -108,6 +109,14 @@ public sealed class PasswordSignInService<TUser, TKey, TContext>
 
         return user;
     }
+
+    // The account the identifier names. Both kinds are looked up the same way, and the answer for a miss is the same, so the choice changes only the lookup.
+    private Task<TUser?> FindAccountAsync(string identifier) => _options.PasswordSignInBy switch
+    {
+        AuthPasswordSignInIdentifier.Email => _users.FindByEmailAsync(identifier),
+        AuthPasswordSignInIdentifier.UserName => _users.FindByNameAsync(identifier),
+        _ => throw new InvalidOperationException("PasswordSignInBy must be Email or UserName."),
+    };
 
     private async Task<bool> IsMicrosoftAccountAsync(TUser user) =>
         (await _users.GetLoginsAsync(user)).Any(l => l.LoginProvider == AuthProviders.Microsoft);
