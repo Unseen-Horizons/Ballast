@@ -2,6 +2,14 @@
 
 Every library in Ballast carries the same version. Each shared version has one section here, newest first.
 
+## 0.1.0-preview.3
+
+Not yet published. Adds the statistics library; every package now carries this version.
+
+### Added
+
+- **Ballast.Statistics**: the one-sided normal upper tail (`Stats.NormalUpperTail`), a pooled one-sided two-proportion z that is null when undefined (`Stats.TwoProportionZ`), Benjamini-Hochberg adjusted p-values (`Stats.BenjaminiHochberg`), and the median and the raw median absolute deviation (`Stats.Median`, `Stats.Mad`). No dependency, and no method returns NaN.
+
 ## 0.1.0-preview.1
 
 Not yet published. The first preview: the libraries listed below, all new.

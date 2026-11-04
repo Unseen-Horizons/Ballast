@@ -11,6 +11,7 @@ basic libraries depend on no other package; the server libraries depend on ASP.N
 - [Ballast.Text](src/Ballast.Text): accent-free text folding and a personal-data masker.
 - [Ballast.Geo](src/Ballast.Geo): coordinate checks, distance, bounding boxes and polygon containment.
 - [Ballast.Money](src/Ballast.Money): currency codes, rounding to minor units, line totals and money formatting.
+- [Ballast.Statistics](src/Ballast.Statistics): the normal upper tail, a pooled two-proportion z, Benjamini-Hochberg adjustment, and the median and median absolute deviation.
 - [Ballast.AspNetCore](src/Ballast.AspNetCore): problem answers with a stable code and trace reference, exception mappings, an API 404, rate limits, security headers, startup secret checks and forwarded headers.
 - [Ballast.Health](src/Ballast.Health): readiness and liveness routes, build info, database and schema checks, startup gates, warm-up and the startup hold.
 - [Ballast.SqlServer](src/Ballast.SqlServer): SQL error classifiers, the enum and restrict-deletes conventions, a retrying transaction helper, a claim helper, sequences, a GO splitter, an isolation reset, and collation and connection checks.

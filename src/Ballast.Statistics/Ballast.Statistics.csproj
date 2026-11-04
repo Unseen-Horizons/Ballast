@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Title>Ballast.Statistics</Title>
+    <Description>Normal tail, pooled two-proportion z, Benjamini-Hochberg adjustment, median and median absolute deviation.</Description>
+  </PropertyGroup>
+
+</Project>

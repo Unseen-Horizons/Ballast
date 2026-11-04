@@ -4,6 +4,7 @@
     <Project Path="src/Ballast.Paging/Ballast.Paging.csproj" />
     <Project Path="src/Ballast.Time/Ballast.Time.csproj" />
     <Project Path="src/Ballast.Text/Ballast.Text.csproj" />
+    <Project Path="src/Ballast.Statistics/Ballast.Statistics.csproj" />
     <Project Path="src/Ballast.Geo/Ballast.Geo.csproj" />
     <Project Path="src/Ballast.Money/Ballast.Money.csproj" />
     <Project Path="src/Ballast.Translations/Ballast.Translations.csproj" />
@@ -28,6 +29,7 @@
     <Project Path="tests/Ballast.Paging.Tests/Ballast.Paging.Tests.csproj" />
     <Project Path="tests/Ballast.Time.Tests/Ballast.Time.Tests.csproj" />
     <Project Path="tests/Ballast.Text.Tests/Ballast.Text.Tests.csproj" />
+    <Project Path="tests/Ballast.Statistics.Tests/Ballast.Statistics.Tests.csproj" />
     <Project Path="tests/Ballast.Geo.Tests/Ballast.Geo.Tests.csproj" />
     <Project Path="tests/Ballast.Money.Tests/Ballast.Money.Tests.csproj" />
     <Project Path="tests/Ballast.Translations.Tests/Ballast.Translations.Tests.csproj" />
