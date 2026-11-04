@@ -69,6 +69,12 @@ public static class AuthRegistration
             .AddEntityFrameworkStores<TContext>()
             .AddDefaultTokenProviders();
 
+        // With the switch off, Identity checks no address, so the one rule left (no two accounts share one) is checked here.
+        if (!options.RequireUniqueEmail)
+        {
+            services.AddScoped<IUserValidator<TUser>, AddressUniquenessValidator<TUser, TKey>>();
+        }
+
         services.TryAddScoped<IAuthAccountStore, IdentityAuthAccountStore<TUser, TKey>>();
         services.TryAddScoped<IAccessTokenClaims<TUser>, NoAccessTokenClaims<TUser>>();
         services.AddScoped<SessionTokens<TUser, TKey>>();
@@ -139,7 +145,7 @@ internal static class AuthIdentityRules
         identity.Password.RequireNonAlphanumeric = options.Password.RequireNonAlphanumeric;
         identity.Password.RequiredUniqueChars = options.Password.RequiredUniqueChars;
 
-        identity.User.RequireUniqueEmail = true;
+        identity.User.RequireUniqueEmail = options.RequireUniqueEmail;
 
         identity.Lockout.MaxFailedAccessAttempts = options.Lockout.MaxFailedAccessAttempts;
         identity.Lockout.DefaultLockoutTimeSpan = options.Lockout.LockoutDuration;
