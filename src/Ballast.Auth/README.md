@@ -35,6 +35,34 @@ var token = await tokens.CreateAsync("contact:42", TimeSpan.FromMinutes(10));
 The subject must carry a prefix, such as `contact:42`, so it can never equal an Identity user id. The store splits on
 that prefix. The example is compiled and run by `ReadmeExampleTests`.
 
+## Example: the directory sync's last run
+
+`MicrosoftSyncStatus` keeps the last run of the directory sync for an admin page. The job records each run's result, and the page
+reads a snapshot. The example is compiled and run by `ReadmeExampleTests`.
+
+```csharp
+using Ballast.Auth;
+
+var status = new MicrosoftSyncStatus();
+var ended = new DateTimeOffset(2026, 11, 4, 10, 0, 0, TimeSpan.Zero);
+
+// The job records the run's result when it ends. The library's sync returns the result.
+status.Record(new MicrosoftSyncResult(
+    MicrosoftSyncOutcome.Applied,
+    Failure: null,
+    HttpStatus: null,
+    Counts: new MicrosoftSyncCounts(UsersAssigned: 12, AppRoles: 3, Updated: 1, SwitchedOff: 0, Created: 0),
+    Problems: [new MicrosoftSyncProblem("ROLE_NOT_IN_MICROSOFT", "Retired")],
+    RolesNotInMicrosoft: ["Retired"],
+    ClientSecretEndsUtc: ended.AddDays(10)), ended);
+
+// The admin page reads a snapshot. The client secret ends in ten days, so it reads Soon.
+var snapshot = status.Snapshot(ended);
+```
+
+The role and permission claims per request (`AddBallastDynamicClaims`) and the seed password generator are described in
+[docs/Auth.md](../../docs/Auth.md).
+
 ## Install
 
 ```powershell

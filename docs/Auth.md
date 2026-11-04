@@ -22,6 +22,11 @@ translate. The package's short example is in [src/Ballast.Auth/README.md](../src
 | `GoogleSignInService<TUser, TKey, TRefresh, TContext>` | Signs in with a Google ID token, links and unlinks a Google login. |
 | `MicrosoftSignInService<TUser, TKey, TRole, TRefresh, TContext>` | Decides a Microsoft handshake, issues and exchanges one-time codes. |
 | `MicrosoftDirectorySync<TUser, TKey, TRole, TRefresh, TContext>` | Runs the directory sync once. The app schedules it. |
+| `AddBallastDynamicClaims<TUser, TKey, TRole>(configure)` | Registers the claims transformation: each request's role and permission claims come from the store, cached per user. Call it after `AddBallastAuth`. |
+| `DynamicClaimsCache` | Evicts a user's cached claims, or those of every holder of a role, after a change. |
+| `AddBallastMicrosoftSyncStatus(configure)` | Registers the in-memory record of the directory sync's last run. |
+| `MicrosoftSyncStatus` | Records each sync run and gives a snapshot of it for an admin page. |
+| `SeedPasswordGenerator` | Generates a throwaway password for an account a development seed creates. |
 | `IAuthAccountStore` | The app's answer for a subject outside Identity: whether it exists, may sign in, and its security stamp. |
 | `IAuthAudit` | Where the library's audit rows go. The app writes them in its own table. |
 | `IAuthNewAccount<TUser>` | The app's own rows for a new account (for example a wallet). Optional. |
@@ -412,6 +417,88 @@ locks the account until a later sync switches it on, and ends its sessions.
 - The read fails with a `MicrosoftGraphException` that names no token and no secret. The exception's `Failure` is one of
   `Token`, `Graph`, `Timeout`, `Response` or `Unexpected`.
 
+## Role and permission claims per request
+
+`AddBallastDynamicClaims<TUser, TKey, TRole>(configure)` registers `DynamicClaimsTransformation`, the app's
+`IClaimsTransformation`. On each authenticated request it removes the role and permission claims the token carries, then adds
+the user's roles and their roles' permissions as the store has them now. The answer is cached per user, so a request does not
+read the store every time.
+
+```csharp
+services.AddBallastAuth<AppUser, string, IdentityRole<string>, AppDb, AppRefresh>(configuration);
+services.AddBallastDynamicClaims<AppUser, string, IdentityRole<string>>(options =>
+{
+    options.PermissionClaimType = "permission"; // the default
+});
+```
+
+The registration adds the memory cache (`AddMemoryCache`), so an app that wants a size limit registers its own cache first. Every
+cache entry declares a size of 1, so a size-limited cache is safe.
+
+- **Eviction.** After a change has committed, the app evicts the cache so the next request reads the new answer.
+  `DynamicClaimsCache.Evict(cache, userId)` drops one user, for a role change, a removal or a deletion. A role whose permission
+  set changed is evicted for every holder with `DynamicClaimsCache.EvictRoleMembersAsync<TUser, TKey>(cache, users, roleName)`.
+  The cache is the one the transformation reads, so the app passes the same instance.
+- **A deleted account.** A token that is validly signed but names an account the store no longer has comes back as an
+  unauthenticated principal. The access check then refuses it.
+- **Not shared across processes.** Each process has its own cache. During a deploy two copies run side by side, and an eviction
+  reaches only the copy that made it. The other copy's cached answer lasts until its absolute time (see the options).
+
+| Option | Default | Meaning |
+|---|---|---|
+| `SubjectClaimType` | `sub` | The claim that carries the user's key. Set it to `AuthClaimNames.Subject` when the app changed that name. |
+| `RoleClaimType` | `role` | The claim that carries one role. Set it to `AuthClaimNames.Role` when the app changed that name. |
+| `PermissionClaimType` | `permission` | The claim that carries one permission. A role's permission claims in the store must use this type. |
+| `SlidingExpiration` | 30 seconds | How long a user's answer lasts after its last use. Must be positive and not exceed `AbsoluteExpiration`. |
+| `AbsoluteExpiration` | 5 minutes | The longest an answer lasts however often it is used. Sliding alone would never lapse for an active user. Must be positive. |
+
+The claim names are read when the transformation is built. A bad value (an empty name, a non-positive time, or a sliding time
+above the absolute one) stops the app at registration, and the message names the setting.
+
+This is a separate mechanism from the access check. `AuthAccessCheck` refuses a token at once when its account's security stamp
+changed or it may no longer sign in, but it does not re-read roles. This transformation re-reads roles and permissions. An app
+that uses both gets the instant cut-off from the first and the role refresh from the second.
+
+## Sync status for an admin page
+
+`MicrosoftSyncStatus` is the in-memory record of the directory sync's last run, for an admin page. It is a singleton, one per
+process. Only the job holder runs the sync, so this is the holder's record: a copy that is not the holder records nothing, and
+after a restart the status reads not-run until the next run.
+
+```csharp
+services.AddBallastMicrosoftSyncStatus(options => options.SecretWarningWindow = TimeSpan.FromDays(30));
+```
+
+| Member | What it does |
+|---|---|
+| `Record(MicrosoftSyncResult run, DateTimeOffset atUtc)` | Records a run from the sync's own result. `Applied` and `LooksWrong` record the figures, problems and roles; `ReadFailed` and `WriteFailed` record a failure and keep the last figures; `Off` clears the figures; `NotHolder` records nothing. |
+| `RecordOff()` | Records that the sync is switched off. The figures are cleared, and the last attempt and the secret's end are kept. |
+| `RecordUnexpectedFailure(atUtc)` | Records a failure in the app itself, after the read (the database, for example). The failure is `Unexpected`, with no status. |
+| `IsNotInMicrosoft(roleName)` | True when the last run that read the directory listed the role as no longer in Microsoft. The comparison ignores case. |
+| `Snapshot()` / `Snapshot(now)` | The status at the clock's time, or at `now`. The client secret's state is judged at that instant. |
+| `SecretStateOf(endsUtc, now)` | `Unknown` for no end date, `Expired` at or after the end, `Soon` within the warning window, otherwise `Ok`. |
+| `Gate` | A `SemaphoreSlim` the caller takes around a run. The status does not take it itself. |
+
+`MicrosoftSyncStatusSnapshot` carries `LastAttemptUtc`, `LastSuccessUtc`, `LastRun` (`NotRun`, `Off`, `Applied`, `NotApplied`,
+`Failed`), `Failure`, `FailureStatus`, `Counts` (with `Created`), `Problems` (with each problem's detail), `RolesNotInMicrosoft`,
+`ClientSecretEndsUtc` and `ClientSecretState`. `IsOff` is true when `LastRun` is `Off`. The lists are copies, so a later run does not
+change a snapshot already taken. An app keeps a small mapping from the snapshot to its own admin-page JSON and adds anything the
+page shows that the library does not know, such as an enabled flag.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `SecretWarningWindow` | 30 days | How long before its end a client secret reads `Soon`. Zero or more. |
+
+`RolesNotInMicrosoft` is taken from every run that read the directory, whether it applied or not, so a run that looks wrong
+still shows the roles Microsoft no longer assigns. An app that showed them only after an applied run changes to this behaviour.
+
+## Seed passwords
+
+`SeedPasswordGenerator.Generate(length)` returns a password with one uppercase letter, one lowercase letter, one digit and one
+symbol, drawn from a cryptographic random source and shuffled. It is at least 12 characters (a shorter length is raised to 12),
+and it always meets the default password rules (`AuthPasswordRules`). It is for a throwaway account in a development seed. An
+environment that goes live sets its own password, rather than writing a generated one to disk.
+
 ## Failure and fallback
 
 - An unknown subject, an expired token, a refused code and a locked account all get one answer, so none reveals which
@@ -443,3 +530,7 @@ locks the account until a later sync switches it on, and ends its sessions.
 - `IssuedSession` is the exchange's body. An app's `LoginResponse` may also carry a `user` object, so an app that keeps that body calls `ExchangeAsync` from its own endpoint.
 - The Microsoft sign-in does not link an existing password account, by address or otherwise. Moving a person from one
   tenant to another needs the app to remove the old Microsoft login first; the library has no call for that.
+- The claims cache and the sync status are per process. An eviction reaches only the copy that made it, and during a deploy a
+  second copy keeps its cached claims until their absolute time. A copy that is not the job holder has no sync run to show.
+- The claims transformation's tests run against an in-memory store, and the cache's expiry is not tested against a clock:
+  `MemoryCache` reads the system clock.
