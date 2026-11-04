@@ -19,8 +19,8 @@ public sealed class AuthPasswordRules
     /// <summary>Whether a password needs an upper-case letter. Default true.</summary>
     public bool RequireUppercase { get; set; } = true;
 
-    /// <summary>Whether a password needs a lower-case letter. Default false.</summary>
-    public bool RequireLowercase { get; set; }
+    /// <summary>Whether a password needs a lower-case letter. Default true, as Identity's own default.</summary>
+    public bool RequireLowercase { get; set; } = true;
 
     /// <summary>Whether a password needs a symbol (anything that is not a letter or a digit). Default true.</summary>
     public bool RequireNonAlphanumeric { get; set; } = true;

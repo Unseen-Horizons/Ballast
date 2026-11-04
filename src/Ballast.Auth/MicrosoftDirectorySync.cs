@@ -40,6 +40,7 @@ public enum MicrosoftSyncOutcome
 /// <param name="HttpStatus">The HTTP status Microsoft answered with, when the read failed with one; otherwise null.</param>
 /// <param name="Counts">The counts, when the directory was read; otherwise null.</param>
 /// <param name="Problems">What the owner should look at. Nothing listed was applied.</param>
+/// <param name="RolesNotInMicrosoft">The roles this app created from Microsoft that no Microsoft assignment names any more. They are listed and never deleted; empty when the directory was not read.</param>
 /// <param name="ClientSecretEndsUtc">When the newest client secret ends, or null when none is listed.</param>
 public sealed record MicrosoftSyncResult(
     MicrosoftSyncOutcome Outcome,
@@ -47,6 +48,7 @@ public sealed record MicrosoftSyncResult(
     int? HttpStatus,
     MicrosoftSyncCounts? Counts,
     IReadOnlyList<MicrosoftSyncProblem> Problems,
+    IReadOnlyList<string> RolesNotInMicrosoft,
     DateTimeOffset? ClientSecretEndsUtc);
 
 /// <summary>
@@ -132,12 +134,12 @@ public sealed class MicrosoftDirectorySync<TUser, TKey, TRole, TRefresh, TContex
     {
         if (!_microsoft.SyncEnabled)
         {
-            return new MicrosoftSyncResult(MicrosoftSyncOutcome.Off, null, null, null, [], null);
+            return new MicrosoftSyncResult(MicrosoftSyncOutcome.Off, null, null, null, [], [], null);
         }
 
         if (!_leadership.IsHolder)
         {
-            return new MicrosoftSyncResult(MicrosoftSyncOutcome.NotHolder, null, null, null, [], null);
+            return new MicrosoftSyncResult(MicrosoftSyncOutcome.NotHolder, null, null, null, [], [], null);
         }
 
         MicrosoftDirectorySnapshot directory;
@@ -149,7 +151,7 @@ public sealed class MicrosoftDirectorySync<TUser, TKey, TRole, TRefresh, TContex
         {
             // The read failed before anything was written. The message names no secret and no token.
             _logger.LogError("The Microsoft directory read failed ({Failure}, HTTP {HttpStatus}). Nothing was applied. {Message}", ex.Failure, ex.HttpStatus, ex.Message);
-            return new MicrosoftSyncResult(MicrosoftSyncOutcome.ReadFailed, ex.Failure, ex.HttpStatus, null, [], null);
+            return new MicrosoftSyncResult(MicrosoftSyncOutcome.ReadFailed, ex.Failure, ex.HttpStatus, null, [], [], null);
         }
 
         var now = _time.GetUtcNow();
@@ -173,13 +175,13 @@ public sealed class MicrosoftDirectorySync<TUser, TKey, TRole, TRefresh, TContex
         if (plan.LooksWrong)
         {
             _logger.LogError("The Microsoft directory sync would switch off every linked account, so nothing was applied. Check the tenant, the app roles and the assignments.");
-            return new MicrosoftSyncResult(MicrosoftSyncOutcome.LooksWrong, null, null, plan.Counts, plan.Problems, secretEnds);
+            return new MicrosoftSyncResult(MicrosoftSyncOutcome.LooksWrong, null, null, plan.Counts, plan.Problems, plan.RolesNotInMicrosoft, secretEnds);
         }
 
         // Checked again: the lock can be lost while the directory is read.
         if (!_leadership.IsHolder)
         {
-            return new MicrosoftSyncResult(MicrosoftSyncOutcome.NotHolder, null, null, plan.Counts, plan.Problems, secretEnds);
+            return new MicrosoftSyncResult(MicrosoftSyncOutcome.NotHolder, null, null, plan.Counts, plan.Problems, plan.RolesNotInMicrosoft, secretEnds);
         }
 
         List<MicrosoftSyncProblem> listed;
@@ -190,11 +192,11 @@ public sealed class MicrosoftDirectorySync<TUser, TKey, TRole, TRefresh, TContex
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "The Microsoft directory sync failed while it wrote its changes. They were rolled back.");
-            return new MicrosoftSyncResult(MicrosoftSyncOutcome.WriteFailed, DirectorySyncFailure.Unexpected, null, plan.Counts, plan.Problems, secretEnds);
+            return new MicrosoftSyncResult(MicrosoftSyncOutcome.WriteFailed, DirectorySyncFailure.Unexpected, null, plan.Counts, plan.Problems, plan.RolesNotInMicrosoft, secretEnds);
         }
 
         // The people whose profile hook failed are listed with the plan's own problems. Their change was rolled back; the others were applied.
-        return new MicrosoftSyncResult(MicrosoftSyncOutcome.Applied, null, null, plan.Counts, [.. plan.Problems, .. listed], secretEnds);
+        return new MicrosoftSyncResult(MicrosoftSyncOutcome.Applied, null, null, plan.Counts, [.. plan.Problems, .. listed], plan.RolesNotInMicrosoft, secretEnds);
     }
 
     // The app's emergency accounts, as the text ids the plan and the write step use.

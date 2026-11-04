@@ -52,6 +52,7 @@ public static class AuthGoogleRegistration
         configure?.Invoke(options);
 
         services.AddSingleton(options);
+        services.TryAddSingleton<IGoogleTokenVerifier, GoogleJsonWebSignatureVerifier>();
         services.TryAddSingleton<IGoogleIdTokenValidator, GoogleIdTokenValidator>();
         services.TryAddScoped<IAuthNewAccount<TUser>, NoAuthNewAccount<TUser>>();
         services.AddScoped<GoogleSignInService<TUser, TKey, TRefresh, TContext>>();
