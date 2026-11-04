@@ -50,8 +50,9 @@ public abstract class TestApiFactory<TEntryPoint> : WebApplicationFactory<TEntry
     protected virtual Task PrepareAsync(CancellationToken ct) => Task.CompletedTask;
 
     /// <summary>
-    /// Drops what <see cref="PrepareAsync"/> made, after the last test. The default does nothing. It runs before the host is
-    /// disposed, and it is called even when preparation failed part way.
+    /// Drops what <see cref="PrepareAsync"/> made, after the last test. The default does nothing. It runs after the host is
+    /// stopped and disposed, so a hosted service that still uses the database has finished with it. It is called even when
+    /// preparation failed part way.
     /// </summary>
     /// <param name="ct">Cancels the teardown.</param>
     protected virtual Task TeardownAsync(CancellationToken ct) => Task.CompletedTask;
@@ -59,17 +60,27 @@ public abstract class TestApiFactory<TEntryPoint> : WebApplicationFactory<TEntry
     /// <summary>Runs <see cref="PrepareAsync"/>. Called once by xUnit before the first test of the collection.</summary>
     public ValueTask InitializeAsync() => new(PrepareAsync(CancellationToken.None));
 
-    /// <summary>Runs <see cref="TeardownAsync"/>, then disposes the host.</summary>
+    /// <summary>
+    /// Stops and disposes the host first, then runs <see cref="TeardownAsync"/>. The host's hosted services may still use
+    /// the database while they stop, so the database is dropped only once the host is gone. Teardown runs even when the host
+    /// fails to dispose.
+    /// </summary>
     public override async ValueTask DisposeAsync()
     {
         try
         {
-            await TeardownAsync(CancellationToken.None);
+            await base.DisposeAsync();
         }
         finally
         {
-            await base.DisposeAsync();
-            GC.SuppressFinalize(this);
+            try
+            {
+                await TeardownAsync(CancellationToken.None);
+            }
+            finally
+            {
+                GC.SuppressFinalize(this);
+            }
         }
     }
 

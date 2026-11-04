@@ -146,6 +146,8 @@ overrides:
 - `RemoveHostedServices` (default true: the API's background services are removed so they do not run against the test database);
 - `PrepareAsync(ct)` and `TeardownAsync(ct)`, which create and drop its database. They run with `CancellationToken.None`.
 
+`DisposeAsync` stops and disposes the host first, then runs `TeardownAsync`, so a hosted service that still uses the database has stopped before the database is dropped. Teardown runs even when the host fails to dispose.
+
 `CreateAnonymousClient()` and `CreateBearerClientAsync(loginPath, credentials, tokenProperty = "accessToken")` log in over HTTP, so
 a test's token is one the login endpoint issues. The login fails with `InvalidOperationException` naming the status and the body
 when it is refused, or when the answer has no token property.
