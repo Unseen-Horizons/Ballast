@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Configuration" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Ballast.AppUpdates\Ballast.AppUpdates.csproj" />
+    <ProjectReference Include="..\..\src\Ballast.Errors\Ballast.Errors.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -6,6 +6,22 @@
     <Project Path="src/Ballast.Text/Ballast.Text.csproj" />
     <Project Path="src/Ballast.Geo/Ballast.Geo.csproj" />
     <Project Path="src/Ballast.Money/Ballast.Money.csproj" />
+    <Project Path="src/Ballast.Translations/Ballast.Translations.csproj" />
+    <Project Path="src/Ballast.Email/Ballast.Email.csproj" />
+    <Project Path="src/Ballast.Storage/Ballast.Storage.csproj" />
+    <Project Path="src/Ballast.AspNetCore/Ballast.AspNetCore.csproj" />
+    <Project Path="src/Ballast.Admin/Ballast.Admin.csproj" />
+    <Project Path="src/Ballast.Health/Ballast.Health.csproj" />
+    <Project Path="src/Ballast.Http/Ballast.Http.csproj" />
+    <Project Path="src/Ballast.SqlServer/Ballast.SqlServer.csproj" />
+    <Project Path="src/Ballast.Jobs/Ballast.Jobs.csproj" />
+    <Project Path="src/Ballast.AppAttestation/Ballast.AppAttestation.csproj" />
+    <Project Path="src/Ballast.Feedback/Ballast.Feedback.csproj" />
+    <Project Path="src/Ballast.AppUpdates/Ballast.AppUpdates.csproj" />
+    <Project Path="src/Ballast.Maui/Ballast.Maui.csproj" />
+    <Project Path="src/Ballast.Auth/Ballast.Auth.csproj" />
+    <Project Path="src/Ballast.Testing/Ballast.Testing.csproj" />
+    <Project Path="src/Ballast.Build/Ballast.Build.csproj" />
   </Folder>
   <Folder Name="/Tests/">
     <Project Path="tests/Ballast.Errors.Tests/Ballast.Errors.Tests.csproj" />
@@ -14,5 +30,22 @@
     <Project Path="tests/Ballast.Text.Tests/Ballast.Text.Tests.csproj" />
     <Project Path="tests/Ballast.Geo.Tests/Ballast.Geo.Tests.csproj" />
     <Project Path="tests/Ballast.Money.Tests/Ballast.Money.Tests.csproj" />
+    <Project Path="tests/Ballast.Translations.Tests/Ballast.Translations.Tests.csproj" />
+    <Project Path="tests/Ballast.Email.Tests/Ballast.Email.Tests.csproj" />
+    <Project Path="tests/Ballast.Storage.Tests/Ballast.Storage.Tests.csproj" />
+    <Project Path="tests/Ballast.AspNetCore.Tests/Ballast.AspNetCore.Tests.csproj" />
+    <Project Path="tests/Ballast.Admin.Tests/Ballast.Admin.Tests.csproj" />
+    <Project Path="tests/Ballast.Health.Tests/Ballast.Health.Tests.csproj" />
+    <Project Path="tests/Ballast.Http.Tests/Ballast.Http.Tests.csproj" />
+    <Project Path="tests/Ballast.SqlServer.Tests/Ballast.SqlServer.Tests.csproj" />
+    <Project Path="tests/Ballast.Jobs.Tests/Ballast.Jobs.Tests.csproj" />
+    <Project Path="tests/Ballast.AppAttestation.Tests/Ballast.AppAttestation.Tests.csproj" />
+    <Project Path="tests/Ballast.Feedback.Tests/Ballast.Feedback.Tests.csproj" />
+    <Project Path="tests/Ballast.AppUpdates.Tests/Ballast.AppUpdates.Tests.csproj" />
+    <Project Path="tests/Ballast.Maui.Tests/Ballast.Maui.Tests.csproj" />
+    <Project Path="tests/Ballast.Auth.Tests/Ballast.Auth.Tests.csproj" />
+    <Project Path="tests/Ballast.Testing.Tests/Ballast.Testing.Tests.csproj" />
+    <Project Path="hosts/Ballast.Testing.Tests.Host/Ballast.Testing.Tests.Host.csproj" />
+    <Project Path="tests/Ballast.Build.Tests/Ballast.Build.Tests.csproj" />
   </Folder>
 </Solution>

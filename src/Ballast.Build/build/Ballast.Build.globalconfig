@@ -1,0 +1,28 @@
+# Ballast.Build: the analyzer severities every project that references the package gets, through GlobalAnalyzerConfigFiles.
+# A global config has no section headers: each key applies to every file of the project.
+is_global = true
+global_level = 1
+
+# Correctness rules, kept at warning level. CI builds with -warnaserror, so each of these fails the build when it fires.
+# Culture-sensitive formatting and parsing (a number written with the machine's culture).
+dotnet_diagnostic.CA1305.severity = warning
+# A method that takes a CancellationToken must pass it on (token forwarding).
+dotnet_diagnostic.CA2016.severity = warning
+# A reserved exception type (Exception, SystemException, ApplicationException) is thrown.
+dotnet_diagnostic.CA2201.severity = warning
+
+# A logging template whose placeholder count does not match its arguments fails at once. A duplicated placeholder throws
+# FormatException inside a catch block and can kill a retry loop, so this one is an error, not a warning.
+dotnet_diagnostic.CA2017.severity = error
+
+# Style preferences, not correctness, so they are off. Their hits would drown the correctness rules above.
+# High-performance LoggerMessage delegates instead of ILogger extension calls.
+dotnet_diagnostic.CA1848.severity = none
+# String interpolation in a logging call.
+dotnet_diagnostic.CA1873.severity = none
+# Public fields, static members on generic types, parameter and type naming, and the Collection suffix.
+dotnet_diagnostic.CA1000.severity = none
+dotnet_diagnostic.CA1051.severity = none
+dotnet_diagnostic.CA1711.severity = none
+dotnet_diagnostic.CA1716.severity = none
+dotnet_diagnostic.CA1725.severity = none

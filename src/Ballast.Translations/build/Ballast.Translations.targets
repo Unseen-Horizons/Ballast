@@ -1,0 +1,37 @@
+<Project>
+
+  <!--
+    Generates a site's translation files from its .resx files during the build: one culture.json file for each culture, and the
+    data script (named by BallastI18nDataFile) that the site loads before its loader. It runs only when a project sets
+    BallastI18nBaseName, for example SharedResources, so a project that does not use it is not changed. A refusal fails the build.
+
+    The properties, with their defaults:
+      BallastI18nBaseName          (none; required to turn the target on)
+      BallastI18nSourceDirectory   the project folder, where the .resx files are
+      BallastI18nOutputDirectory   the project folder's wwwroot\i18n
+      BallastI18nDataFile          the project folder's wwwroot\js\i18n-data.js
+      BallastI18nErrorCodesFile    (none) a JSON object of error code to key, written as ERROR_CODE_MAP
+      BallastI18nWebRoot           (none) the folder whose HTML files are checked against BallastI18nLoaderScript
+      BallastI18nLoaderScript      (none) for example /js/i18n.js
+      BallastI18nHeader            (none) the first line of the data script; the library's default when not set
+  -->
+  <UsingTask TaskName="Ballast.Translations.GenerateI18nTask" AssemblyFile="$(MSBuildThisFileDirectory)..\lib\net10.0\Ballast.Translations.dll" />
+
+  <PropertyGroup>
+    <BallastI18nSourceDirectory Condition="'$(BallastI18nSourceDirectory)' == ''">$(MSBuildProjectDirectory)</BallastI18nSourceDirectory>
+    <BallastI18nOutputDirectory Condition="'$(BallastI18nOutputDirectory)' == ''">$(MSBuildProjectDirectory)\wwwroot\i18n</BallastI18nOutputDirectory>
+    <BallastI18nDataFile Condition="'$(BallastI18nDataFile)' == ''">$(MSBuildProjectDirectory)\wwwroot\js\i18n-data.js</BallastI18nDataFile>
+  </PropertyGroup>
+
+  <Target Name="BallastGenerateI18n" BeforeTargets="BeforeBuild" Condition="'$(BallastI18nBaseName)' != ''">
+    <GenerateI18nTask SourceDirectory="$(BallastI18nSourceDirectory)"
+                      BaseName="$(BallastI18nBaseName)"
+                      OutputDirectory="$(BallastI18nOutputDirectory)"
+                      DataFile="$(BallastI18nDataFile)"
+                      ErrorCodesFile="$(BallastI18nErrorCodesFile)"
+                      WebRoot="$(BallastI18nWebRoot)"
+                      LoaderScript="$(BallastI18nLoaderScript)"
+                      Header="$(BallastI18nHeader)" />
+  </Target>
+
+</Project>

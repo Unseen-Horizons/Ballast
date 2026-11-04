@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Title>Ballast.Jobs</Title>
+    <Description>Background work that writes runs in one copy of an app at a time: a SQL Server application lock held on its own connection, leader-only hosted services, a 409 for admin actions that a copy without the lock must refuse, and a readiness check for the lock.</Description>
+  </PropertyGroup>
+
+  <!--
+    Jobs needs ASP.NET Core (the hosted services, the resource filter, the readiness check) and Microsoft.Data.SqlClient (the
+    lock's own connection). ASP.NET Core is not trim-safe or AOT-compatible, so the library is not marked as either: marking it
+    would promise a trimmed or AOT app a thing the framework code cannot keep. Ballast.Health, which the readiness check uses,
+    brings Entity Framework Core with it for its database check; that dependency belongs to Ballast.Health.
+  -->
+  <PropertyGroup>
+    <IsTrimmable>false</IsTrimmable>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Ballast.Errors\Ballast.Errors.csproj" />
+    <ProjectReference Include="..\Ballast.AspNetCore\Ballast.AspNetCore.csproj" />
+    <ProjectReference Include="..\Ballast.Health\Ballast.Health.csproj" />
+  </ItemGroup>
+
+</Project>

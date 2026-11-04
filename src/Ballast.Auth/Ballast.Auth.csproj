@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Title>Ballast.Auth</Title>
+    <Description>Sign-in for a web app: rotating refresh tokens with reuse detection, short access tokens with an instant cut-off, lockout and the enumeration guard, ASP.NET Core Identity over Entity Framework (string or int keys), single-use e-mail sign-in links, Google and Microsoft staff sign-in, and a signed access token for an account outside Identity.</Description>
+  </PropertyGroup>
+
+  <!--
+    Identity, Entity Framework and the JWT bearer pipeline are ASP.NET Core and EF types, which are not trim-safe or AOT-safe.
+    The shared settings in src/Directory.Build.props switch both on, and this file switches them off. The MAUI app does not
+    reference this library: its client half lives in Ballast.Maui.
+  -->
+  <PropertyGroup>
+    <IsTrimmable>false</IsTrimmable>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BCrypt.Net-Next" />
+    <PackageReference Include="Google.Apis.Auth" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.OpenIdConnect" />
+    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" />
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Ballast.Email\Ballast.Email.csproj" />
+    <ProjectReference Include="..\Ballast.Errors\Ballast.Errors.csproj" />
+    <ProjectReference Include="..\Ballast.Jobs\Ballast.Jobs.csproj" />
+    <ProjectReference Include="..\Ballast.SqlServer\Ballast.SqlServer.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,9 @@
+{
+  "save": "Save",
+  "cancel": "Cancel",
+  "greeting": "Hello, {name}!",
+  "dialog": {
+    "title": "Settings",
+    "close": "Close"
+  }
+}

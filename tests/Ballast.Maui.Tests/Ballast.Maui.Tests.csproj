@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The tests run on net10.0 only. The library's logic is all net10.0; its MAUI and Android code is checked by building the library for
+    its platform targets, not by running tests.
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Ballast.Maui\Ballast.Maui.csproj" />
+    <ProjectReference Include="..\..\src\Ballast.Testing\Ballast.Testing.csproj" />
+    <!-- The server's answer types, read by the app's session code in the parity test (AppAttestationParityTests). -->
+    <ProjectReference Include="..\..\src\Ballast.AppAttestation\Ballast.AppAttestation.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Title>Ballast.Storage</Title>
+    <Description>Atomic file writes, safe relative paths, the data folder check, and file types read from the first bytes.</Description>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Title>Ballast.SqlServer</Title>
+    <Description>SQL Server and EF Core helpers: error classification, enum-to-text model convention, transaction, claim and sequence helpers, isolation reset, batch splitting, collation and connection-string checks.</Description>
+    <!--
+      Entity Framework Core is not trim-safe or AOT-compatible (its model building and query translation use reflection), so a
+      trimmed or AOT-compiled app cannot support this library. The settings in src/Directory.Build.props are turned off here.
+    -->
+    <IsTrimmable>false</IsTrimmable>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" />
+    <PackageReference Include="Microsoft.Data.SqlClient" />
+  </ItemGroup>
+
+</Project>

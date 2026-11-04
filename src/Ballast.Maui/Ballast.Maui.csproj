@@ -1,0 +1,85 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Targets. net10.0 holds all the logic, and it is what the tests run on: every MAUI type sits behind an interface that the
+    net10.0 code uses, and the MAUI implementations are compiled only for the platform targets. net10.0-android holds the
+    Android providers and the AdMob glue. net10.0-windows is added only on Windows, so the Linux CI builds net10.0 and android. The root Directory.Build.props sets TargetFramework, so it is cleared here for the list.
+  -->
+  <PropertyGroup>
+    <Title>Ballast.Maui</Title>
+    <Description>Phone app plumbing for .NET MAUI: owner-sealed on-device storage, connectivity state, HTTP client setup, AdMob banners, the localisation runtime, crash reports, permission asks, the store review prompt policy and small view helpers.</Description>
+    <TargetFrameworks>net10.0;net10.0-android</TargetFrameworks>
+    <TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">$(TargetFrameworks);net10.0-windows10.0.19041.0</TargetFrameworks>
+    <TargetFramework></TargetFramework>
+  </PropertyGroup>
+
+  <!--
+    UseMaui only for the platform targets, where the MAUI packages and the Android workload are needed. The net10.0 build
+    references no MAUI assembly at all.
+  -->
+  <PropertyGroup Condition="'$(TargetFramework)' != 'net10.0'">
+    <UseMaui>true</UseMaui>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24.0</SupportedOSPlatformVersion>
+    <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
+    <TargetPlatformMinVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</TargetPlatformMinVersion>
+    <WindowsPackageType>None</WindowsPackageType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Http" />
+  </ItemGroup>
+
+  <!-- The MAUI controls exist on the platform targets only; the net10.0 build references none of them. -->
+  <ItemGroup Condition="'$(TargetFramework)' != 'net10.0'">
+    <PackageReference Include="Microsoft.Maui.Controls" />
+  </ItemGroup>
+
+  <!-- AdMob exists on Android only (Plugin.AdMob's bindings). -->
+  <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+    <PackageReference Include="Plugin.AdMob" />
+  </ItemGroup>
+
+  <!-- The Android bindings: Play In-App Updates, the Play review prompt, Play Integrity and the Credential Manager sign-in (Google). -->
+  <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">
+    <PackageReference Include="Xamarin.Google.Android.Play.App.Update" />
+    <PackageReference Include="Xamarin.Google.Android.Play.Review" />
+    <PackageReference Include="Xamarin.Google.Android.Play.Integrity" />
+    <PackageReference Include="Xamarin.AndroidX.Credentials" />
+    <PackageReference Include="Xamarin.AndroidX.Credentials.PlayServicesAuth" />
+    <PackageReference Include="Xamarin.GoogleAndroid.Libraries.Identity.GoogleId" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Ballast.Errors\Ballast.Errors.csproj" />
+    <ProjectReference Include="..\Ballast.Feedback\Ballast.Feedback.csproj" />
+    <ProjectReference Include="..\Ballast.AppUpdates\Ballast.AppUpdates.csproj" />
+    <ProjectReference Include="..\Ballast.Storage\Ballast.Storage.csproj" />
+    <ProjectReference Include="..\Ballast.Text\Ballast.Text.csproj" />
+  </ItemGroup>
+
+  <!--
+    The MAUI-only code (the platform implementations, and the views) is compiled into the platform targets alone. The
+    net10.0 build leaves these folders out, so no MAUI type can reach it.
+  -->
+  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+    <Compile Remove="Maui\**" />
+    <Compile Remove="Android\**" />
+    <Compile Remove="Windows\**" />
+  </ItemGroup>
+
+  <!--
+    The Android code is compiled for Android alone. The Maui code is compiled for every platform target.
+  -->
+  <ItemGroup Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) != 'android'">
+    <Compile Remove="Android\**" />
+  </ItemGroup>
+
+  <!--
+    The package's build folder ships with it: build/Ballast.Maui.targets (NuGet imports it into the app) and the consumer
+    ProGuard rule it names. Nothing else in the folder.
+  -->
+  <ItemGroup>
+    <None Include="build\**" Pack="true" PackagePath="build" />
+  </ItemGroup>
+
+</Project>

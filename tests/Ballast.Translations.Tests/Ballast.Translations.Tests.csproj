@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Ballast.Translations\Ballast.Translations.csproj" />
+  </ItemGroup>
+
+  <!--
+    The fixture files are read as data, so they are copied beside the test assembly. They are not embedded: the SDK would
+    otherwise compile each .resx fixture into the assembly as a resource. The default None glob does not pick up .resx files,
+    so the fixtures are added to None explicitly.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Remove="Fixtures\**" />
+    <None Remove="Fixtures\**" />
+    <None Include="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
