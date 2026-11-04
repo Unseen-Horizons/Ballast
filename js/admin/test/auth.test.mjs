@@ -99,6 +99,43 @@ describe('createAuth: signing in and out', () => {
 });
 
 describe('createAuth: signing out with the server', () => {
+  it('sends the stored access token as the bearer of the logout request', async () => {
+    const { auth, calls } = setup({
+      tokens: { auth_token: 'a1', refresh_token: 'r1' },
+      logoutPath: '/auth/logout',
+      fetchImpl: () => new Response(null, { status: 204 })
+    });
+
+    assert.equal(await auth.signOut(), true);
+    assert.equal(new Headers(calls[0].init.headers).get('Authorization'), 'Bearer a1');
+    assert.equal(new Headers(calls[0].init.headers).get('Content-Type'), 'application/json');
+  });
+
+  it('sends no Authorization header when no access token is stored, and still posts the refresh token', async () => {
+    const { auth, calls } = setup({
+      tokens: { refresh_token: 'r1' },
+      logoutPath: '/auth/logout',
+      fetchImpl: () => new Response(null, { status: 204 })
+    });
+
+    assert.equal(await auth.signOut(), true);
+    assert.equal(new Headers(calls[0].init.headers).get('Authorization'), null);
+    assert.deepEqual(JSON.parse(calls[0].init.body), { refreshToken: 'r1' });
+  });
+
+  it('a 401 from the logout endpoint still clears the local session and ends signed out', async () => {
+    const { auth, storage, location } = setup({
+      tokens: { auth_token: 'a1', refresh_token: 'r1' },
+      logoutPath: '/auth/logout',
+      fetchImpl: () => json({ title: 'Unauthorized' }, 401)
+    });
+
+    assert.equal(await auth.signOut(), false);
+    assert.equal(storage.getItem('auth_token'), null);
+    assert.equal(storage.getItem('refresh_token'), null);
+    assert.deepEqual(location.navigations, ['/admin/login.html']);
+  });
+
   it('posts the refresh token to logoutPath with keepalive, then clears both tokens and opens the sign-in page', async () => {
     const { auth, storage, location, calls } = setup({
       tokens: { auth_token: 'a1', refresh_token: 'r1' },

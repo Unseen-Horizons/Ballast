@@ -50,6 +50,9 @@
    * @param {object} [options.storage] sessionStorage, by default, for the counts.
    * @param {string} [options.countsKey] the storage key of the counts; '_shellCounts' by default.
    * @param {function(string, object): Promise<Response>} [options.fetch] fetch, by default the page's own.
+   * @param {object} [options.problem] the options problemMessage takes (fieldErrors, traceId, codeText, preferDetail, fallback),
+   *   passed on every error banner the shell writes. None by default, which gives the full text. For httpErrorMessage a given
+   *   fallback replaces the 'HTTP <status>' one.
    * @returns {object} the shell
    */
   function createShell(options) {
@@ -62,6 +65,7 @@
     var environmentFor = opt.environmentFor || defaultEnvironment;
     var countsDelayMs = opt.countsDelayMs === undefined ? 250 : opt.countsDelayMs;
     var countsKey = opt.countsKey || '_shellCounts';
+    var problem = opt.problem || {};
     var permissions = null;
     var fullAccess = false;
     var mounted = null;
@@ -146,7 +150,7 @@
 
       if (!res.ok) {
         var body = await web().readProblemBody(res);
-        var failure = new Error(web().problemMessage(res.status, body));
+        var failure = new Error(web().problemMessage(res.status, body, problem));
         failure.status = res.status;
         throw failure;
       }
@@ -164,7 +168,7 @@
      * title is generic, so the field messages are appended.
      */
     function httpErrorMessage(status, body) {
-      return web().problemMessage(status, body, { fallback: 'HTTP ' + status });
+      return web().problemMessage(status, body, Object.assign({ fallback: 'HTTP ' + status }, problem));
     }
 
     function fail(message) {
