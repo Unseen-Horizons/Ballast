@@ -46,6 +46,7 @@ Bound with `ReadJwt` from the section named by `JwtSection`, then checked by `Va
 | `LegacyBcryptPasswords` | `false` | When `true`, a password hashed by the old BCrypt format is accepted and rehashed at the next sign-in. |
 | `PasswordSignIn` | `All` | Who may sign in with a password: `Off` (nobody, refused before any lookup), `OwnerOnly` (only accounts in `PrivilegedRoleName`), or `All` (every active account that has a password). Microsoft and Google sign-in are not affected. |
 | `PasswordSignInBy` | `Email` | The identifier a password sign-in takes: `Email` (the address) or `UserName`. The lookup, the lockout and the hashing time are the same in either mode, and an unknown identifier gets the same answer as a wrong password. Any other value is refused at start. |
+| `RequireUniqueEmail` | `true` | Every account must have an address, and no two may share one (Identity's rule). `false` lets an account have no address, and still refuses an address another account has (`AddressUniquenessValidator`). It is refused at start unless `PasswordSignInBy` is `UserName`, because with e-mail sign-in the address is the key. A Microsoft account always has an address, so it is unaffected. |
 | `PrivilegedRoleName` | null | The role that `OwnerOnly` admits. |
 | `NewAccountRole` | null | The role a new account gets from a sign-up. Null gives none. |
 | `Claims` | `AuthClaimNames` | The claim names the tokens use (below). |
@@ -53,7 +54,7 @@ Bound with `ReadJwt` from the section named by `JwtSection`, then checked by `Va
 | `Password` | `AuthPasswordRules` | The password rules (below). |
 | `Lockout` | `AuthLockoutRules` | The lockout rules (below). |
 
-Tokens are HS256 JWTs. The access token carries `sub`, the email, the given name, the roles, the security stamp, `jti`, `nbf` and `exp`. The refresh token is 64 random bytes, base64, stored only as its SHA-256.
+Tokens are HS256 JWTs. The access token carries `sub`, the email (when the account has one), the given name, the roles, the security stamp, `jti`, `nbf` and `exp`. The refresh token is 64 random bytes, base64, stored only as its SHA-256.
 
 ### AuthClaimNames
 
@@ -404,6 +405,12 @@ locks the account until a later sync switches it on, and ends its sessions.
   `PasswordSignInBy` modes, the admin password reset, and the staff profile hook: its three calls, the create rollback,
   the per-person rollback in a sync, and a key the app sets.
 - The reset's audit row names no administrator, and a reset does not lift a lockout.
+- With `RequireUniqueEmail` off, Identity checks no address, so the library registers `AddressUniquenessValidator` beside
+  Identity's own validators. It allows an account with no address, and refuses an address another account already has,
+  on create and on a change, compared on the normalised address, with Identity's `DuplicateEmail`. So the library's
+  address lookups (`FindByEmailAsync`, in the Microsoft and Google sign-ins and the sync) never meet two accounts. This
+  holds only for accounts written through the library's Identity validators; rows written around them (a raw SQL insert,
+  or an app's own store) are not checked, and an app that writes those must keep addresses unique itself.
 - `MicrosoftSignInService` and `MicrosoftDirectorySync` take the profile hook as a new constructor parameter, and
   `MicrosoftSignInService` also takes a logger. `GoogleIdTokenValidator` takes the verifier. An app that builds these by
   hand, rather than from dependency injection, must pass them.

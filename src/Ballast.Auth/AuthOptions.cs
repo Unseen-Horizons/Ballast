@@ -91,6 +91,14 @@ public sealed class AuthOptions
     public AuthPasswordSignInIdentifier PasswordSignInBy { get; set; } = AuthPasswordSignInIdentifier.Email;
 
     /// <summary>
+    /// Whether every account must have an e-mail address, and no two may share one (Identity's <c>RequireUniqueEmail</c>). Default true, as
+    /// today. False lets an account have no address, for an app whose people sign in by user name. It is refused unless
+    /// <see cref="PasswordSignInBy"/> is <see cref="AuthPasswordSignInIdentifier.UserName"/>, because with e-mail sign-in the address is the
+    /// key. A Microsoft account always has an address, so it is unaffected.
+    /// </summary>
+    public bool RequireUniqueEmail { get; set; } = true;
+
+    /// <summary>
     /// The one role that <see cref="AuthPasswordSignInMode.OwnerOnly"/> admits. Required in that mode, and ignored otherwise. The
     /// library does not know which role an app means by it.
     /// </summary>
@@ -198,6 +206,11 @@ public sealed class AuthOptions
         if (!Enum.IsDefined(PasswordSignInBy))
         {
             throw new InvalidOperationException("PasswordSignInBy must be Email or UserName.");
+        }
+
+        if (!RequireUniqueEmail && PasswordSignInBy != AuthPasswordSignInIdentifier.UserName)
+        {
+            throw new InvalidOperationException("RequireUniqueEmail can be false only with PasswordSignInBy UserName: with e-mail sign-in the address must stay unique and required.");
         }
 
         if (Password.RequiredLength < 1 || Password.RequiredUniqueChars < 1)

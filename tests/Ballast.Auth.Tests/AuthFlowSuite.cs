@@ -485,7 +485,7 @@ public abstract class AuthFlowSuite<TUser, TKey, TRefresh>
 
     private static string Identifier(AuthPasswordSignInIdentifier mode) => mode == AuthPasswordSignInIdentifier.UserName ? StaffName : Email;
 
-    private static async Task<TKey> CreateNamedUserAsync(Harness<TUser, TKey, TRefresh> harness, string userName, string email)
+    private static async Task<TKey> CreateNamedUserAsync(Harness<TUser, TKey, TRefresh> harness, string userName, string? email)
     {
         await using var scope = harness.Scope();
         var users = scope.ServiceProvider.GetRequiredService<UserManager<TUser>>();
@@ -663,6 +663,146 @@ public abstract class AuthFlowSuite<TUser, TKey, TRefresh>
 
         Assert.Equal("USER_NOT_FOUND", error.Code);
         Assert.Equal(404, error.StatusCode);
+    }
+
+    [Fact]
+    public async Task With_the_switch_off_an_account_with_no_address_signs_in_by_name_refreshes_and_changes_its_password_and_stamp()
+    {
+        await using var harness = await StartAsync(configure: o =>
+        {
+            o.PasswordSignInBy = AuthPasswordSignInIdentifier.UserName;
+            o.RequireUniqueEmail = false;
+        });
+        var userId = await CreateNamedUserAsync(harness, StaffName, null);
+
+        var session = await SignInAsync(harness, StaffName);
+        var rotated = await RefreshAsync(harness, session.RefreshToken);
+        Assert.False(string.IsNullOrEmpty(rotated.AccessToken));
+
+        const string changedPassword = "Changed-horse-46!";
+        await using (var scope = harness.Scope())
+        {
+            await Accounts(scope).ChangePasswordAsync(TestConfig.KeyText(userId), Password, changedPassword);
+        }
+
+        await using (var scope = harness.Scope())
+        {
+            var user = await Passwords(scope).CheckPasswordAsync(StaffName, changedPassword);
+            Assert.Equal(StaffName, user.UserName);
+        }
+
+        const string resetPassword = "Reset-horse-47!";
+        var stampBeforeReset = await StampAsync(harness, userId);
+        await using (var scope = harness.Scope())
+        {
+            await Accounts(scope).ResetPasswordAsync(userId, resetPassword);
+        }
+
+        Assert.NotEqual(stampBeforeReset, await StampAsync(harness, userId));
+        await using (var scope = harness.Scope())
+        {
+            var user = await Passwords(scope).CheckPasswordAsync(StaffName, resetPassword);
+            Assert.Equal(StaffName, user.UserName);
+        }
+    }
+
+    [Fact]
+    public async Task With_the_switch_on_an_account_with_no_address_is_refused_as_today()
+    {
+        await using var harness = await StartAsync(configure: o => o.PasswordSignInBy = AuthPasswordSignInIdentifier.UserName);
+
+        await using var scope = harness.Scope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<TUser>>();
+        var result = await users.CreateAsync(new TUser { UserName = StaffName, FullName = "Ana Horvat" }, Password);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(result.Errors, error => error.Code == "InvalidEmail");
+    }
+
+    [Fact]
+    public void Validate_refuses_the_switch_off_with_e_mail_sign_in_and_accepts_it_with_user_name_sign_in()
+    {
+        var byEmail = new AuthOptions { RequireUniqueEmail = false, Key = TestConfig.Key, Issuer = "test-issuer", Audience = "test-audience" };
+        var refused = Assert.Throws<InvalidOperationException>(() => byEmail.Validate());
+        Assert.Contains("RequireUniqueEmail", refused.Message, StringComparison.Ordinal);
+
+        var byName = new AuthOptions
+        {
+            RequireUniqueEmail = false,
+            PasswordSignInBy = AuthPasswordSignInIdentifier.UserName,
+            Key = TestConfig.Key,
+            Issuer = "test-issuer",
+            Audience = "test-audience",
+        };
+        byName.Validate();
+    }
+
+    [Fact]
+    public async Task With_the_switch_off_two_accounts_with_no_address_are_both_allowed()
+    {
+        await using var harness = await StartAsync(configure: o =>
+        {
+            o.PasswordSignInBy = AuthPasswordSignInIdentifier.UserName;
+            o.RequireUniqueEmail = false;
+        });
+
+        await CreateNamedUserAsync(harness, "first.staff", null);
+        await CreateNamedUserAsync(harness, "second.staff", null);
+
+        await using var scope = harness.Scope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<TUser>>();
+        Assert.Equal(2, users.Users.Count(user => user.Email == null));
+    }
+
+    [Fact]
+    public async Task With_the_switch_off_an_address_another_account_has_is_refused_on_create_whatever_its_case()
+    {
+        await using var harness = await StartAsync(configure: o =>
+        {
+            o.PasswordSignInBy = AuthPasswordSignInIdentifier.UserName;
+            o.RequireUniqueEmail = false;
+        });
+        await CreateNamedUserAsync(harness, StaffName, Email);
+
+        await using var scope = harness.Scope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<TUser>>();
+        var result = await users.CreateAsync(new TUser { UserName = "other.staff", Email = Email.ToUpperInvariant(), FullName = "Other" }, Password);
+
+        Assert.False(result.Succeeded);
+        Assert.Contains(result.Errors, error => error.Code == "DuplicateEmail");
+    }
+
+    [Fact]
+    public async Task With_the_switch_off_an_address_another_account_has_is_refused_on_an_address_change_and_not_saved()
+    {
+        await using var harness = await StartAsync(configure: o =>
+        {
+            o.PasswordSignInBy = AuthPasswordSignInIdentifier.UserName;
+            o.RequireUniqueEmail = false;
+        });
+        await CreateNamedUserAsync(harness, StaffName, Email);
+        var otherId = await CreateNamedUserAsync(harness, "other.staff", null);
+
+        await using (var scope = harness.Scope())
+        {
+            var users = scope.ServiceProvider.GetRequiredService<UserManager<TUser>>();
+            var other = await users.FindByIdAsync(TestConfig.KeyText(otherId));
+            var result = await users.SetEmailAsync(other!, Email.ToUpperInvariant());
+
+            Assert.False(result.Succeeded);
+            Assert.Contains(result.Errors, error => error.Code == "DuplicateEmail");
+        }
+
+        await using var check = harness.Scope();
+        var stored = await check.ServiceProvider.GetRequiredService<UserManager<TUser>>().FindByIdAsync(TestConfig.KeyText(otherId));
+        Assert.Null(stored!.Email);
+    }
+
+    private static async Task<string?> StampAsync(Harness<TUser, TKey, TRefresh> harness, TKey userId)
+    {
+        await using var scope = harness.Scope();
+        var users = scope.ServiceProvider.GetRequiredService<UserManager<TUser>>();
+        return (await users.FindByIdAsync(TestConfig.KeyText(userId)))?.SecurityStamp;
     }
 
     [Fact]

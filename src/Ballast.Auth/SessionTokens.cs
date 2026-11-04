@@ -63,12 +63,17 @@ public sealed class SessionTokens<TUser, TKey>
         var claims = new List<Claim>
         {
             new(names.Subject, AuthKey.Text(user.Id)),
-            new(names.Email, user.Email ?? string.Empty),
             new(names.GivenName, user.FullName ?? string.Empty),
             new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             new(JwtRegisteredClaimNames.Nbf, EpochTime.GetIntDate(now).ToString(CultureInfo.InvariantCulture), ClaimValueTypes.Integer64),
             new(names.SecurityStamp, user.SecurityStamp ?? string.Empty),
         };
+
+        // An account with no address has no e-mail claim, rather than an empty one.
+        if (!string.IsNullOrEmpty(user.Email))
+        {
+            claims.Add(new Claim(names.Email, user.Email));
+        }
 
         foreach (var role in await _users.GetRolesAsync(user))
         {
