@@ -37,8 +37,8 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <PackageTags>ballast</PackageTags>
     <RepositoryType>git</RepositoryType>
-    <RepositoryUrl>https://github.com/unseen-horizons/ballast</RepositoryUrl>
-    <PackageProjectUrl>https://github.com/unseen-horizons/ballast</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Unseen-Horizons/Ballast</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/Unseen-Horizons/Ballast</PackageProjectUrl>
   </PropertyGroup>
 
   <!--

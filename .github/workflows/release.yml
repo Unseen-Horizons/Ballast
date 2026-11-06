@@ -1,8 +1,9 @@
 name: Release
 
 # Runs when a version tag (v*) is pushed. The build job builds, tests and packs the libraries, and checks that the tag
-# matches the package version. The publish job pushes the packages to nuget.org. It does not start until the owner
-# approves the run in the release environment, so nothing is published without that approval.
+# matches the package version. The publish job pushes the packages to GitHub Packages (the organisation's NuGet feed)
+# and makes the GitHub Release, with every package attached so anyone can download them without signing in. It does
+# not start until the owner approves the run in the release environment, so nothing is published without that approval.
 
 on:
   push:
@@ -64,7 +65,7 @@ jobs:
           if-no-files-found: error
 
   publish:
-    name: Publish to nuget.org
+    name: Publish to GitHub Packages and the GitHub Release
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -72,8 +73,8 @@ jobs:
     # the owner approves the run.
     environment: release
     permissions:
-      contents: read
-      id-token: write
+      contents: write # the GitHub Release
+      packages: write # GitHub Packages
 
     steps:
       - name: Download packages
@@ -87,14 +88,21 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
-      # Trusted Publishing: nuget.org checks this run and gives a temporary API key, which lasts 1 hour and is not stored.
-      - name: Sign in to nuget.org
-        id: login
-        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
-        with:
-          user: ${{ secrets.NUGET_USER }}
+      # The workflow's own token, which lasts for this run only. GitHub Packages takes no symbol packages, so the .snupkg
+      # files go only to the Release below. --skip-duplicate: a version already on the feed is skipped and the run still
+      # passes, so read the log.
+      - name: Push to GitHub Packages
+        env:
+          FEED: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: dotnet nuget push "packages/*.nupkg" --source "$FEED" --api-key "$TOKEN" --no-symbols --skip-duplicate
 
-      # The .snupkg symbol packages beside each .nupkg are pushed with it.
-      # --skip-duplicate: a version that is already on nuget.org is skipped and the run still passes, so read the log.
-      - name: Push to nuget.org
-        run: dotnet nuget push "packages/*.nupkg" --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json --skip-duplicate
+      # The packages attached to the Release download without a GitHub sign-in, which the feed always asks for.
+      - name: Create the GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          prerelease=""
+          case "$TAG" in *-*) prerelease="--prerelease" ;; esac
+          gh release create "$TAG" packages/*.nupkg packages/*.snupkg --repo "$GITHUB_REPOSITORY" --verify-tag             --title "$TAG" $prerelease             --notes "The packages of $TAG. What changed is in CHANGELOG.md. The same packages are on the organisation's GitHub Packages feed."

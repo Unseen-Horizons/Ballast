@@ -25,14 +25,23 @@ Each library's usage guide, with every option and every way it fails, is listed 
 
 ## Status
 
-Preview. Version 0.1.0-preview.1 is built and packed here. It is not yet published to nuget.org, and the APIs can still
-change before 1.0.
+Preview. The APIs can still change before 1.0.
+
+## Getting the packages
+
+- **Download:** every release on https://github.com/Unseen-Horizons/Ballast/releases has all the packages attached.
+  Anyone can download them. Put them in a folder and add that folder as a package source.
+- **Restore:** the packages are on the organisation's GitHub Packages feed,
+  `https://nuget.pkg.github.com/Unseen-Horizons/index.json`. GitHub asks for a sign-in on every download from it, so a
+  restore needs a GitHub token with `read:packages` (see [docs/setup/publishing.md](docs/setup/publishing.md), Part 2).
+
+Ballast is not on nuget.org.
 
 ## Releases
 
-Only the owner publishes. A release is a version tag, and the owner approves its publish step before any package reaches
-nuget.org. See [docs/releasing.md](docs/releasing.md) for the steps, and [docs/setup/publishing.md](docs/setup/publishing.md)
-for the one-time setup of the GitHub and nuget.org accounts.
+Only the owner publishes. A release is a version tag, and the owner approves its publish step before any package is
+published. See [docs/releasing.md](docs/releasing.md) for the steps, and [docs/setup/publishing.md](docs/setup/publishing.md)
+for the one-time setup.
 
 ## Licence
 
