@@ -39,6 +39,10 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      # Ballast.Maui builds for net10.0-android, which needs the MAUI Android workload. The runner has the Android SDK and Java.
+      - name: Install the MAUI Android workload
+        run: dotnet workload install maui-android
+
       - name: Wait for SQL Server
         uses: ./.github/actions/wait-for-sql
         with:
