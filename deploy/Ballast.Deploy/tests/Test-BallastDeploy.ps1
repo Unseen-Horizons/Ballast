@@ -227,6 +227,7 @@ $script:FakeProcess = {
             [System.IO.File]::WriteAllText((Join-Path $out 'app.dll'), 'selftest')
             return (New-Result -Code $script:PublishExit -Output @('published (selftest)'))
         }
+        'restore' { return (New-Result -Code $script:RestoreExit -Output @('restored (selftest)')) }
         'test' { return (New-Result -Code $script:GuardExit -Output $script:GuardOutput) }
         'ef' {
             if ($a[1] -eq '--version') { return (New-Result -Output @('Entity Framework Core .NET Command-line Tools', $script:FakeEfVersion)) }
@@ -294,6 +295,7 @@ function Reset-Fakes {
     $script:WorktreeFiles = @()
     $script:CreatedDirs = @()
     $script:PublishExit = 0
+    $script:RestoreExit = 0
     $script:GuardExit = 0
     $script:GuardOutput = @('Passed!')
     $script:ApplyExit = 0
@@ -1120,6 +1122,27 @@ try {
         $out = Invoke-MigrationsCaptured -Config (New-TestConfig -WithMigrations -WithGuard) -Yes
         ($out.Result.ExitCode -eq 0) -and ((Measure-LogCount 'git worktree add*') -eq 1) -and
             ((Measure-LogCount 'run dotnet ef migrations bundle*') -eq 1) -and ((Measure-LogCount 'bundle-apply') -eq 1)
+    }
+
+    Check 'Invoke-BallastMigrations: with no -BundlePath, the worktree project is restored before dotnet ef lists the migrations' {
+        Set-MigrationFixtures
+        $script:GitRefs['HEAD'] = $script:Sha
+        $script:WorktreeFiles = @('.config/dotnet-tools.json', 'src/Api/Api.csproj', 'tests/Guard/Guard.csproj')
+        $script:ListAnswers.Enqueue(@($script:PendingListing))
+        $out = Invoke-MigrationsCaptured -Config (New-TestConfig -WithMigrations -WithGuard) -WhatIf
+        $restore = Find-LogIndex 'run dotnet restore *Api.csproj'
+        $list = Find-LogIndex 'run dotnet ef migrations list*'
+        ($out.Result.ExitCode -eq 0) -and ($restore -ge 0) -and ($list -gt $restore) -and ((Measure-LogCount 'run dotnet restore*') -eq 1)
+    }
+
+    Check 'Invoke-BallastMigrations: a failed restore stops with exit 1 before any Azure call or listing' {
+        Set-MigrationFixtures
+        $script:RestoreExit = 1
+        $script:ListAnswers.Enqueue(@($script:PendingListing))
+        $out = Invoke-MigrationsCaptured -Config (New-TestConfig -WithMigrations -WithGuard) -Bundle $bundlePath -WhatIf
+        ($out.Result.ExitCode -eq 1) -and ($out.Text -match 'dotnet restore .* failed \(exit 1\)') -and
+            ((Measure-LogCount 'az webapp config appsettings list*') -eq 0) -and ((Measure-LogCount 'az sql server firewall-rule create*') -eq 0) -and
+            ((Measure-LogCount 'run dotnet ef migrations list*') -eq 0)
     }
 
     Check 'Invoke-BallastMigrations: an SDK below MinimumSdkMajor is refused before any Azure call (exit 1)' {

@@ -1244,6 +1244,13 @@ function Invoke-BallastMigrationPlan {
     $projectPath = Join-Path $RepoPath $AppConfig.Project
     if (-not (Test-Path -LiteralPath $projectPath -PathType Leaf)) { throw "The project $($AppConfig.Project) is not in $RepoPath." }
 
+    # dotnet ef reads the project's restored package assets before it builds anything, so in a folder that was never
+    # restored (the clean worktree, a fresh clone) it fails with "Unable to retrieve project metadata". The restore runs
+    # here, before any Azure call, and a failed restore stops the run.
+    Write-BallastStep "Restoring $($AppConfig.Project)"
+    $restore = Invoke-BallastProcess -FilePath 'dotnet' -Arguments @('restore', $projectPath) -WorkingDirectory $RepoPath
+    if ($restore.ExitCode -ne 0) { throw "dotnet restore $($AppConfig.Project) failed (exit $($restore.ExitCode)).`n$(Get-BallastTail -Lines $restore.Output)" }
+
     $connRaw = Get-BallastMigrationConnection -Migrations $mig -ResourceGroup $group -WebApp $webApp
     $info = Read-BallastConnectionString -ConnectionString $connRaw
     Register-BallastSecret -Value $info.Password

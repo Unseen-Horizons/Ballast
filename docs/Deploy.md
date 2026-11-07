@@ -160,7 +160,7 @@ Exit codes (frozen):
 
 `Invoke-BallastMigrations -Config <config> -App <name> [-RepoPath <path>] [-BundlePath <file>] [-Ref <ref>] [-Database <name>] [-WhatIf] [-Yes]`
 
-Applies one app's pending migrations. Steps, in order: the .NET SDK and dotnet-ef preflight, which runs `dotnet tool restore`; with no `-BundlePath`, a clean worktree of `-Ref`; the connection string (with `-Database`, only its catalog changes); the database check, the collation check (when `RequireCaseInsensitiveCollation` is true), and the temporary firewall rule (when `SqlServer` is set); the pending list from `dotnet ef migrations list --json`; the guard; a summary; the prompt; the bundle (built after the prompt from the worktree when `-BundlePath` is not given); a post-check that nothing is pending. The `ThrowawayDirectories` folders exist from the first EF command until the run ends. Every step after the list is skipped when nothing is pending.
+Applies one app's pending migrations. Steps, in order: the .NET SDK and dotnet-ef preflight, which runs `dotnet tool restore`; with no `-BundlePath`, a clean worktree of `-Ref`; `dotnet restore` of the app's project (dotnet-ef cannot read a project that was never restored); the connection string (with `-Database`, only its catalog changes); the database check, the collation check (when `RequireCaseInsensitiveCollation` is true), and the temporary firewall rule (when `SqlServer` is set); the pending list from `dotnet ef migrations list --json`; the guard; a summary; the prompt; the bundle (built after the prompt from the worktree when `-BundlePath` is not given); a post-check that nothing is pending. The `ThrowawayDirectories` folders exist from the first EF command until the run ends. Every step after the list is skipped when nothing is pending.
 
 | Parameter | Meaning |
 |---|---|
@@ -250,6 +250,7 @@ The guard's own tests decide what a marker means. The module only reads the mark
 | The database's collation is case-sensitive while `RequireCaseInsensitiveCollation` is true, or cannot be read | Exit 1, before the firewall rule. |
 | The .NET SDK is below `MinimumSdkMajor`, or dotnet-ef is not the version `.config/dotnet-tools.json` pins | Exit 1, before any Azure call. |
 | `-Database` names the app's own database (in any case), or is not a database name | Exit 1, before the firewall rule. |
+| `dotnet restore` of the app's project fails before the migrations are listed | Exit 1, with the end of the restore output, before the connection string is read and before the firewall rule. |
 | A run fails after its `ThrowawayDirectories` folder is made | The folder is deleted in the same run. A folder that cannot be deleted is a warning with its path. |
 | The migration list cannot be read | Refused connections are retried (`ListRetries`), then exit 1. Other errors exit 1 at once. |
 | The guard fails, or is unavailable under `-Yes` | Exit 1. Nothing is applied. |

@@ -2,6 +2,12 @@
 
 Every library in Ballast carries the same version. Each shared version has one section here, newest first.
 
+## Unreleased
+
+### Fixed
+
+- **Ballast.Deploy**: `Invoke-BallastMigrations` restores the app's project (`dotnet restore`) before `dotnet ef migrations list`. Without it, a standalone apply with no `-BundlePath` failed in its clean worktree with "Unable to retrieve project metadata", because dotnet-ef reads the restored package assets before it builds. A failed restore is exit 1, before any Azure call.
+
 ## 0.1.0-preview.4
 
 Not yet published. Adds public holiday calendars to Ballast.Time; every package now carries this version.
