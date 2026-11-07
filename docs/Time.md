@@ -3,7 +3,7 @@
 Ballast.Time reads time at a place in that place's own zone. It finds a zone from its id, turns a wall-clock time at a place
 into a UTC instant (including the hour a spring switch skips and the hour an autumn switch repeats), shows a place's clock
 with its offset when that offset differs from the viewer's, and gives a clock for one zone that reads its time from a
-`TimeProvider`.
+`TimeProvider`. It also gives the national public holidays of registered countries (see Public holidays below).
 
 Install with `dotnet add package Ballast.Time --prerelease`. The package targets `net10.0` and depends on no package.
 
@@ -354,6 +354,180 @@ so a slot in that hour counts as past for both of its occurrences.
 
 Fails: no exception of its own. Reading `Now` can throw `ArgumentOutOfRangeException` at the very end of `DateTime`'s range.
 
+## Public holidays
+
+The national public holidays and days off of registered countries, computed from each law's rules. Nothing is fetched and
+nothing is cached. A calendar is a list of dates, so no zone is involved: the caller passes the date in the place's own
+calendar (see the worked example below).
+
+A country with no registered calendar gives `null`. The library never answers for another country, and never guesses. A
+caller that gets `null` refuses or asks.
+
+The examples below use Croatia (`HR`) and assume `var croatia = PublicHolidayCalendar.For("HR")!;`.
+
+### `PublicHolidayCalendar.For(string? countryIso2)`
+
+Returns the national calendar of a country, or `null`.
+
+- The code is matched without regard to case or surrounding white space: `"hr"` and `" HR "` give the same calendar.
+- `null`, a blank string, and a code with no registered calendar (`BA`, whose Republika Srpska calendar is not confirmed)
+  all give `null`.
+
+```csharp
+PublicHolidayCalendar.For("hr");   // the Croatian calendar
+PublicHolidayCalendar.For("BA");   // null: no Bosnia and Herzegovina calendar is registered
+PublicHolidayCalendar.For("CH");   // null: Swiss holidays are set by each canton
+```
+
+Fails: never throws.
+
+### `PublicHolidayCalendar.For(string? countryIso2, string? region)`
+
+Returns the calendar of a country or of one of its regions, or `null`.
+
+- `region` is `null` for the national calendar: `For("HR", null)` is the same as `For("HR")`.
+- `region` is matched without regard to case or surrounding white space. A blank region (`""`, `"  "`) is not the national
+  calendar: it gives `null`.
+- A region the country does not list gives `null`.
+
+```csharp
+PublicHolidayCalendar.For("BA", "RS");   // null: the Republika Srpska calendar is not confirmed
+PublicHolidayCalendar.For("BA", "FBIH"); // null: the Federation's calendar is not confirmed
+PublicHolidayCalendar.For("HR", "X");    // null: Croatia lists no regions
+```
+
+Fails: never throws.
+
+### `PublicHolidayCalendar.SupportedCountries`
+
+The ISO codes, in upper case and sorted, of every country with at least one registered calendar. It is read-only and
+the same list on every call. Right now it is `AT, CZ, HR, HU, IT, RS, SI`. `BA` is not in it: its only calendar, Republika
+Srpska, is not confirmed (see "Not registered").
+
+### `IPublicHolidayCalendar`
+
+Every calendar has these members.
+
+| Member | Meaning |
+|---|---|
+| `CountryIso2` | The ISO 3166-1 alpha-2 code, in upper case. |
+| `Region` | The region code, or `null` for the country's own calendar. |
+| `Scope` | One sentence saying what the list holds and what it leaves out. Show it wherever the list is used. |
+| `FirstYear` | The first year covered: always `2020`. |
+| `LastYear` | The last year covered: always `2100`. |
+| `IsHoliday(DateOnly day)` | `true` when the date is a holiday or a day off in this calendar, a day in lieu included. |
+| `InYear(int year)` | Every entry of the year, sorted by date. A day in lieu is its own entry with `IsSubstituteDay` set. |
+
+`IsHoliday` and `InYear` throw `ArgumentOutOfRangeException` for a year outside `FirstYear` to `LastYear`. They never return
+an empty list or a guess for a year they do not cover. The range is 2020 to 2100 for every calendar, because a holiday law
+changes over time, and a rule is only known to hold for the years it was checked against.
+
+Two holidays may fall on the same date (Western and Orthodox Easter can coincide, and a day in lieu never takes a date
+already listed, but a fixed holiday and an Easter-based one can still share a date). Both are listed.
+
+### `PublicHoliday`
+
+```csharp
+public sealed record PublicHoliday(DateOnly Date, string LocalName, string EnglishName, bool IsSubstituteDay = false);
+```
+
+- `Date`: the calendar date. It is a plain date in the country's own calendar, with no zone.
+- `LocalName`: the name in the country's language, in its own script. For a day in lieu, it is the holiday's own name.
+- `EnglishName`: the English name. A day in lieu gets the suffix ` (day off in lieu)`.
+- `IsSubstituteDay`: `true` for a day in lieu, a day off that stands in for a holiday that fell on a Sunday. The original
+  Sunday entry stays in the list.
+
+### `Easter.Western(int year)` and `Easter.Orthodox(int year)`
+
+The Western (Gregorian) and Orthodox Easter Sundays, as Gregorian `DateOnly` values. The calendars compute their Easter days
+from these. They are public, so an app can use the same dates.
+
+```csharp
+Easter.Western(2026);   // 2026-04-05
+Easter.Orthodox(2026);  // 2026-04-12
+```
+
+Fails: `ArgumentOutOfRangeException` for a year outside 1583 to 9999, the years the Gregorian calendar covers. A year outside
+that range is never answered with a guess.
+
+### Calendars
+
+Each registered calendar follows the rules of its law. Where a day is named in the law without a date rule, its offset from
+Easter is given in the source note. Every row in a table below is a day the calendar lists; a day that is not listed is
+absent, not a day of work by inference.
+
+| Country | Region | Status | Source | Kind of source | Scope (as the calendar states it) |
+|---|---|---|---|---|---|
+| HR | national | Confirmed, read 2026-11-06 | https://narodne-novine.nn.hr/clanci/sluzbeni/2019_11_110_2212.html (NN 110/2019, Article 1) | Official gazette (Narodne novine) | Public holidays and non-working days of the Croatian holidays law (NN 110/2019, Article 1). Memorial days (spomendani) are not included. |
+| SI | national | Confirmed, read 2026-11-06 | https://www.gov.si/teme/drzavni-prazniki-in-dela-prosti-dnevi/ (ZPDPD, Articles 1 and 2) | Government summary page (gov.si), not the statute text | Public holidays and days off of the Slovenian holidays law (ZPDPD). Commemorations that are not days off are not included. |
+| AT | national | Confirmed, read 2026-11-06 | https://www.ris.bka.gv.at/GeltendeFassung.wxe?Abfrage=Bundesnormen&Gesetzesnummer=10008541 (Arbeitsruhegesetz, Section 7 Abs. 2) | Official federal legal information system (RIS) | Nationwide public holidays of the Arbeitsruhegesetz, Section 7 Abs. 2. The list has no regional days. |
+| IT | national | Confirmed, read 2026-11-06 | https://www.normattiva.it/uri-res/N2Ls?urn:nir:stato:legge:1949-05-27;260~art2 (Law 260/1949, Article 2) | Official legal portal (Normattiva) | National public holidays under Law 260/1949 and its amendments; local patron-saint days and 4 October (Law 151/2025) are not included. |
+| CZ | national | Confirmed, read 2026-11-06 | https://www.zakonyprolidi.cz/cs/2000-245 (Act No. 245/2000 Coll., sections 1 to 3) | Legal database reproducing the consolidated law (not the official Collection of Laws) | State holidays and other holidays under Act No. 245/2000 Coll., all of them days of rest. |
+| HU | national | Confirmed, read 2026-11-06 | https://net.jogtar.hu/jogszabaly?docid=A1200001.TV (Act I of 2012, section 102 (1)) | Hungarian legal database giving the Act's text | Public holidays under section 102 (1) of Act I of 2012; bridge days swapped by ministerial decree each year are not included. |
+| RS | national | Confirmed, read 2026-11-06 | https://www.paragraf.rs/propisi/zakon_o_drzavnim_i_drugim_praznicima_u_republici_srbiji.html (Law on State and Other Holidays, Articles 1, 1a, 2, 3, 3a) | Legal database reproducing the gazette text (not the official Sl. glasnik RS) | National public holidays under the Law on State and Other Holidays: state holidays and the Orthodox Christmas and Easter holidays. Victory Day (9 May, a working day), the working commemorations and the religious holidays of other communities are not included. |
+
+Whether a Sunday holiday (Easter Sunday, Pentecost Sunday) is listed differs by country because the laws differ: Hungary's
+section 102 (1) names neither, while some other countries' laws do list them.
+
+Limits that the sources leave open:
+
+- **Serbia (RS)**: the source is a legal database. Amendments after the consolidated text it shows (92/2011) were not read.
+- **Czechia (CZ)**: the source is a legal database. The official Collection of Laws was not read.
+- **Hungary (HU)**: the bridge days that the government sets by decree each year are not modelled. The footnote marker on
+  section 102 (1) was not found in the read, so any amendment note it carries was not read.
+- **Italy (IT)**: 4 October (Law 151/2025) is not listed. The text read says it is a festa nazionale but does not state that work stops.
+
+Days that a rule table cannot express are left out and named in the calendar's `Scope`: lunar holidays (Eid al-Fitr, Eid al-Adha), regional and
+patron-saint days, and days a region or religious community keeps on its own.
+
+#### Days in lieu (`sundayMovesToNextWorkingDay`)
+
+Serbia (RS) moves a substitutable holiday that falls on a Sunday. The day in lieu is the first
+following day that is not a Saturday, not a Sunday and not already listed. In Serbia, 15 February 2026 is a Sunday. 16
+February is the second day of the holiday, so the day in lieu is 17 February 2026, and `InYear(2026)` lists it with
+`IsSubstituteDay` set and the name `Statehood Day (day off in lieu)`. A Saturday holiday is not moved. The other registered
+calendars do not move days.
+
+#### Not registered
+
+These countries have no registered calendar, so `For` gives `null` for them. Each class exists in the code and waits for its
+law to be confirmed.
+
+| Country | Why it is not registered |
+|---|---|
+| CH (Switzerland) | Not supported. Holidays are set by each canton (only 1 August is federal), so a country-level list would mislead. |
+| DE (Germany) | Not confirmed against its law. Only 3 October is confirmed (Einigungsvertrag, Article 2). The other days are set by the 16 Länder's laws, which were not read. Nationwide days only, when registered. |
+| SK (Slovakia) | Not confirmed against its law. The slov-lex page returned only the Act's title. |
+| ME (Montenegro) | Not confirmed. The government page did not open, and the text read is from a legal database that is current only to 2021. |
+| MK (North Macedonia) | Not confirmed. The official gazette failed its certificate check, and the Assembly site returned HTTP 403. |
+| AL (Albania) | Not confirmed. The official PDF of Law No. 7651 returned HTTP 404; the rows follow a secondary source. Its weekend rule includes Saturdays, which the engine cannot express. |
+| XK (Kosovo) | Not confirmed against the official gazette. The text read is a copy of the 2008 gazette. Its Saturday rule is not expressible: the engine moves only Sundays. |
+| BA, Republika Srpska (`For("BA", "RS")`) | Not confirmed. Its Sunday-move rule and its believers-only religious days are not confirmed (Constitutional Court decision U 3/13 is on record; the rest of the law's text was read from a legal database, not the official gazette). The class stays in the code, unregistered. |
+| BA, state level (`For("BA")`) | Not confirmed. No state law listing the holidays was found; the two proclamation days rest on laws whose text was not read. |
+| BA, FBIH (`For("BA", "FBIH")`) | Not confirmed. The federal holiday law was not read; the rows follow news and ministry notices. |
+
+#### Worked example
+
+Today's holiday status in Croatia, from the clock of the place (Zagreb), with the date passed as a plain calendar date:
+
+```csharp
+var zagreb = new LocalClock("Europe/Zagreb", TimeProvider.System);
+var croatia = PublicHolidayCalendar.For("HR") ?? throw new InvalidOperationException("No calendar for HR.");
+
+bool offToday = croatia.IsHoliday(zagreb.Today); // the date in Zagreb, not in UTC or the phone's zone
+```
+
+`zagreb.Today` is the date in Zagreb, which changes at midnight in Zagreb. A holiday check for a place uses the place's own
+date. The same check for a viewer in another zone would need the viewer's date and the place's calendar, both passed explicitly.
+
+With a fixed date in 2026 (Western Easter Sunday is 5 April, so Easter Monday is 6 April):
+
+```csharp
+croatia.IsHoliday(new DateOnly(2026, 4, 6));   // true: Easter Monday
+croatia.IsHoliday(new DateOnly(2026, 12, 25)); // true: Christmas Day
+croatia.IsHoliday(new DateOnly(2026, 12, 24)); // false: Christmas Eve is not in the Croatian list
+```
+
 ## Failure summary
 
 | Member | Returns `null` | Throws |
@@ -368,6 +542,10 @@ Fails: no exception of its own. Reading `Now` can throw `ArgumentOutOfRangeExcep
 | `new LocalClock` | No: the constructor throws instead | `ArgumentNullException`; `ArgumentException` for a blank, malformed or unknown zone |
 | `LocalClock.DateOf` | No | `ArgumentException` for a `Local` value; `ArgumentOutOfRangeException` at the ends of the range |
 | `LocalClock.ToUtc` | No | `ArgumentOutOfRangeException` for an hour outside 0 to 23, or outside the range |
+| `PublicHolidayCalendar.For` (both forms) | Yes: null or blank country, unregistered country, unregistered or blank region | Never |
+| `PublicHolidayCalendar.SupportedCountries` | No | Never |
+| `IPublicHolidayCalendar.IsHoliday`, `InYear` | No | `ArgumentOutOfRangeException` for a year outside 2020 to 2100; `InvalidOperationException` if a day in lieu would fall outside its year (no table does this) |
+| `Easter.Western`, `Easter.Orthodox` | No | `ArgumentOutOfRangeException` for a year outside 1583 to 9999 |
 
 ## Which zone to pass
 
@@ -385,3 +563,5 @@ Fails: no exception of its own. Reading `Now` can throw `ArgumentOutOfRangeExcep
   that instant in the other zone with `InZone`.
 - It does not model GTFS service days or transit timetables. Those belong to the caller.
 - It does not decide which zone a person is in. The caller gives the viewer's zone.
+- It does not list every holiday of a country. A calendar lists only what its `Scope` says, and a country, region or religious
+  community with no registered calendar gives `null`. It does not model bridge days or lunar holidays.

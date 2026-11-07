@@ -5,7 +5,7 @@ has a short example that runs as written.
 
 - [Ballast.Errors](Errors.md): error type, codes, problem answer and problem reader.
 - [Ballast.Paging](Paging.md): page request, offset and paged result.
-- [Ballast.Time](Time.md): time zone lookup, instants, place time and the local clock.
+- [Ballast.Time](Time.md): time zone lookup, instants, place time, the local clock and public holiday calendars for registered countries.
 - [Ballast.Text](Text.md): text folding and the personal-data masker.
 - [Ballast.Statistics](Statistics.md): the normal upper tail, a pooled two-proportion z, Benjamini-Hochberg adjustment, and the median and median absolute deviation.
 - [Ballast.Geo](Geo.md): coordinate checks, distance, bounding boxes and polygons.

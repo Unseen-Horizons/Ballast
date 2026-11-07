@@ -30,6 +30,19 @@ public class ReadmeExampleTests
         // A clock for one zone, read from the system clock here.
         var clock = new LocalClock("Europe/Zagreb", TimeProvider.System);
         Console.WriteLine(clock.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)); // today's date in Zagreb
+
+        // Croatia's national holidays on today's date in Zagreb. The date has no zone: it is the calendar date in Croatia.
+        var croatia = PublicHolidayCalendar.For("HR") ?? throw new InvalidOperationException("No calendar for HR.");
+        Console.WriteLine(croatia.IsHoliday(clock.Today)); // True on a Croatian holiday, otherwise False
+    }
+
+    [Fact]
+    public void The_holiday_example_gives_the_values_its_comments_state()
+    {
+        var croatia = PublicHolidayCalendar.For("HR") ?? throw new InvalidOperationException("No calendar for HR.");
+
+        Assert.True(croatia.IsHoliday(new DateOnly(2026, 12, 25)));
+        Assert.False(croatia.IsHoliday(new DateOnly(2026, 12, 24)));
     }
 
     [Fact]

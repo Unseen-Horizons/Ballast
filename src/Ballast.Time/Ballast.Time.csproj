@@ -2,7 +2,12 @@
 
   <PropertyGroup>
     <Title>Ballast.Time</Title>
-    <Description>Time zone lookup, place time that keeps each local time in its own zone, and a one-zone local clock.</Description>
+    <Description>Time zone lookup, place time that keeps each local time in its own zone, a one-zone local clock, and public holiday calendars for registered countries.</Description>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The unit tests build calendars from test-local rules, so they need the internal engine. -->
+    <InternalsVisibleTo Include="Ballast.Time.Tests" />
+  </ItemGroup>
 
 </Project>

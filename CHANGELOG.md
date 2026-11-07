@@ -2,6 +2,14 @@
 
 Every library in Ballast carries the same version. Each shared version has one section here, newest first.
 
+## 0.1.0-preview.4
+
+Not yet published. Adds public holiday calendars to Ballast.Time; every package now carries this version.
+
+### Added
+
+- **Ballast.Time**: public holidays of registered countries, from 2020 to 2100, computed from each law's rules. `PublicHolidayCalendar.For` gives a country's national calendar, or a region's (`For(iso2, region)`), and `null` for a country or region with no registered calendar. The registered calendars are Austria, Czechia, Croatia, Hungary, Italy, Serbia and Slovenia. Each carries its source and its status in `docs/Time.md`. `IPublicHolidayCalendar`, `PublicHoliday`, `Easter.Western` and `Easter.Orthodox` are the public types.
+
 ## 0.1.0-preview.3
 
 Not yet published. Adds the statistics library; every package now carries this version.
